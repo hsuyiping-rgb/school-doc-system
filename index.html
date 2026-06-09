@@ -1,0 +1,1380 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>學校行政公文系統</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: 'Microsoft JhengHei', '微軟正黑體', sans-serif;
+    background: #f5f0eb;
+    min-height: 100vh;
+    color: #333;
+  }
+
+  /* ── 頂部導覽 ── */
+  header {
+    background: #4a3728;
+    color: #fff;
+    padding: 14px 24px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    box-shadow: 0 2px 8px rgba(0,0,0,.25);
+  }
+  header h1 { font-size: 1.2rem; letter-spacing: .05em; }
+  .tab-nav { display: flex; gap: 8px; }
+  .tab-btn {
+    padding: 6px 18px;
+    border-radius: 20px;
+    border: 2px solid rgba(255,255,255,.4);
+    background: transparent;
+    color: #fff;
+    cursor: pointer;
+    font-size: .9rem;
+    transition: .2s;
+  }
+  .tab-btn.active { background: #fff; color: #4a3728; border-color: #fff; font-weight: 700; }
+  .tab-btn:hover:not(.active) { background: rgba(255,255,255,.15); }
+
+  /* ── 主區塊 ── */
+  .container { max-width: 960px; margin: 0 auto; padding: 24px 16px; }
+  .page { display: none; }
+  .page.active { display: block; }
+
+  /* ── 卡片 ── */
+  .card {
+    background: #fff;
+    border-radius: 14px;
+    padding: 24px;
+    margin-bottom: 20px;
+    box-shadow: 0 2px 12px rgba(0,0,0,.08);
+  }
+  .card h2 { font-size: 1rem; color: #4a3728; margin-bottom: 16px; display: flex; align-items: center; gap: 8px; }
+
+  /* ── 公文類型按鈕 ── */
+  .type-btns { display: flex; gap: 12px; margin-bottom: 4px; flex-wrap: wrap; }
+  .type-btn {
+    flex: 1; min-width: 100px;
+    padding: 12px 0;
+    border-radius: 10px;
+    border: 2px solid #d5c9be;
+    background: #faf8f5;
+    font-size: 1rem;
+    cursor: pointer;
+    transition: .2s;
+    color: #666;
+  }
+  .type-btn.active { background: #4a3728; color: #fff; border-color: #4a3728; }
+  .type-btn:hover:not(.active) { border-color: #4a3728; color: #4a3728; }
+
+  /* ── 輸入欄位 ── */
+  label { font-size: .88rem; color: #666; display: block; margin-bottom: 6px; margin-top: 14px; }
+  label span.req { color: #c0392b; margin-left: 2px; }
+  label span.opt { color: #aaa; font-size: .8rem; margin-left: 4px; }
+  textarea, input[type=text] {
+    width: 100%;
+    border: 1.5px solid #d5c9be;
+    border-radius: 8px;
+    padding: 10px 12px;
+    font-size: .95rem;
+    font-family: inherit;
+    resize: vertical;
+    transition: border .2s;
+    background: #faf8f5;
+  }
+  textarea:focus, input[type=text]:focus { outline: none; border-color: #4a3728; background: #fff; }
+  textarea { min-height: 100px; }
+
+  /* ── 上傳區 ── */
+  .upload-area {
+    border: 2px dashed #c8bdb5;
+    border-radius: 10px;
+    padding: 20px;
+    text-align: center;
+    cursor: pointer;
+    background: #faf8f5;
+    transition: .2s;
+    margin-top: 14px;
+  }
+  .upload-area:hover { border-color: #4a3728; background: #f3ede7; }
+  .upload-area input { display: none; }
+  .upload-area p { color: #888; font-size: .9rem; margin-top: 6px; }
+  .upload-area .icon { font-size: 2rem; }
+  .file-preview {
+    margin-top: 10px;
+    padding: 10px 14px;
+    background: #f0ebe5;
+    border-radius: 8px;
+    font-size: .88rem;
+    color: #555;
+    display: none;
+    align-items: center;
+    justify-content: space-between;
+  }
+  .file-preview.show { display: flex; }
+  .file-preview button {
+    background: none; border: none; color: #c0392b; cursor: pointer; font-size: 1.1rem;
+  }
+
+  /* ── 解析確認框 ── */
+  .parse-result {
+    display: none;
+    background: #f0f8f0;
+    border: 1.5px solid #7cb87c;
+    border-radius: 10px;
+    padding: 16px;
+    margin-top: 14px;
+  }
+  .parse-result.show { display: block; }
+  .parse-result h3 { font-size: .9rem; color: #2e7d32; margin-bottom: 10px; }
+  .parse-grid { display: grid; grid-template-columns: 120px 1fr; gap: 6px 10px; font-size: .88rem; align-items: center; }
+  .parse-grid .key { color: #555; font-weight: 600; }
+  .parse-grid input { padding: 5px 8px; font-size: .88rem; background: #fff; }
+  .parse-actions { margin-top: 12px; display: flex; gap: 10px; }
+
+  /* ── 按鈕 ── */
+  .btn {
+    padding: 10px 22px;
+    border-radius: 8px;
+    border: none;
+    cursor: pointer;
+    font-size: .95rem;
+    font-family: inherit;
+    font-weight: 600;
+    transition: .2s;
+  }
+  .btn-primary { background: #4a3728; color: #fff; }
+  .btn-primary:hover { background: #3a2a1e; }
+  .btn-primary:disabled { background: #b0a49c; cursor: not-allowed; }
+  .btn-outline { background: #fff; color: #4a3728; border: 2px solid #4a3728; }
+  .btn-outline:hover { background: #f3ede7; }
+  .btn-sm { padding: 6px 14px; font-size: .85rem; }
+  .btn-danger { background: #c0392b; color: #fff; }
+  .btn-danger:hover { background: #a93226; }
+
+  /* ── AI 輸出 ── */
+  .output-area {
+    display: none;
+    margin-top: 20px;
+  }
+  .output-area.show { display: block; }
+  .output-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px; }
+  .output-header h2 { font-size: 1rem; color: #4a3728; }
+  .output-content {
+    background: #fffdf9;
+    border: 1.5px solid #e0d5c8;
+    border-radius: 10px;
+    padding: 20px 24px;
+    white-space: pre-wrap;
+    line-height: 1.9;
+    font-size: .95rem;
+    min-height: 200px;
+  }
+  .output-actions { margin-top: 12px; display: flex; gap: 10px; }
+
+  /* ── Loading ── */
+  .loading {
+    display: none;
+    text-align: center;
+    padding: 30px;
+    color: #888;
+  }
+  .loading.show { display: block; }
+  .spinner {
+    width: 36px; height: 36px;
+    border: 4px solid #e0d5c8;
+    border-top-color: #4a3728;
+    border-radius: 50%;
+    animation: spin .8s linear infinite;
+    margin: 0 auto 12px;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  /* ── 追蹤表 ── */
+  .stats-row { display: flex; gap: 12px; margin-bottom: 20px; flex-wrap: wrap; }
+  .stat-card {
+    flex: 1; min-width: 120px;
+    background: #fff;
+    border-radius: 12px;
+    padding: 16px;
+    text-align: center;
+    box-shadow: 0 2px 8px rgba(0,0,0,.07);
+  }
+  .stat-card .num { font-size: 1.8rem; font-weight: 700; color: #4a3728; }
+  .stat-card .label { font-size: .8rem; color: #888; margin-top: 4px; }
+
+  .filter-row { display: flex; gap: 8px; margin-bottom: 14px; flex-wrap: wrap; align-items: center; }
+  .filter-btn {
+    padding: 5px 14px;
+    border-radius: 16px;
+    border: 1.5px solid #d5c9be;
+    background: #faf8f5;
+    cursor: pointer;
+    font-size: .85rem;
+    transition: .2s;
+  }
+  .filter-btn.active { background: #4a3728; color: #fff; border-color: #4a3728; }
+
+  table { width: 100%; border-collapse: collapse; font-size: .88rem; }
+  th { background: #f0ebe5; padding: 10px 12px; text-align: left; color: #4a3728; font-weight: 700; border-bottom: 2px solid #d5c9be; }
+  td { padding: 10px 12px; border-bottom: 1px solid #ede8e3; vertical-align: middle; }
+  tr:hover td { background: #faf8f5; }
+
+  .badge {
+    padding: 3px 10px;
+    border-radius: 12px;
+    font-size: .78rem;
+    font-weight: 600;
+    display: inline-block;
+  }
+  .badge-pending { background: #fff3cd; color: #856404; }
+  .badge-progress { background: #cce5ff; color: #004085; }
+  .badge-done { background: #d4edda; color: #155724; }
+  .badge-urgent { background: #f8d7da; color: #721c24; }
+  .badge-sign { background: #e8dff5; color: #5a2d8a; }
+  .badge-letter { background: #d1ecf1; color: #0c5460; }
+  .badge-draft { background: #fde8d8; color: #7a3a0a; }
+
+  .deadline-near { color: #c0392b; font-weight: 600; }
+  .deadline-ok { color: #27ae60; }
+  .deadline-none { color: #aaa; }
+
+  select {
+    padding: 4px 8px;
+    border: 1.5px solid #d5c9be;
+    border-radius: 6px;
+    font-size: .85rem;
+    font-family: inherit;
+    background: #faf8f5;
+    cursor: pointer;
+  }
+
+  .empty-state { text-align: center; padding: 40px; color: #aaa; }
+  .empty-state .icon { font-size: 2.5rem; margin-bottom: 10px; }
+
+  /* 函 專屬按鈕 */
+  .receiver-btn, .format-btn {
+    padding: 8px 14px;
+    border-radius: 8px;
+    border: 1.5px solid #d5c9be;
+    background: #faf8f5;
+    font-size: .85rem;
+    cursor: pointer;
+    transition: .2s;
+    color: #666;
+    text-align: center;
+    line-height: 1.4;
+  }
+  .receiver-btn.active, .format-btn.active {
+    background: #4a3728; color: #fff; border-color: #4a3728;
+  }
+  .receiver-btn:hover:not(.active), .format-btn:hover:not(.active) {
+    border-color: #4a3728; color: #4a3728;
+  }
+
+  /* ── API Key 設定 ── */
+  .api-banner {
+    background: #fff8e1;
+    border: 1.5px solid #f9a825;
+    border-radius: 10px;
+    padding: 14px 18px;
+    margin-bottom: 20px;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    flex-wrap: wrap;
+  }
+  .api-banner span { font-size: .9rem; color: #795548; flex: 1; }
+  .api-banner input { flex: 2; min-width: 200px; padding: 7px 10px; }
+
+  /* ── 擬辦格式化輸出 ── */
+  .draft-section { margin-bottom: 14px; }
+  .draft-section h4 {
+    font-size: .85rem;
+    color: #4a3728;
+    margin-bottom: 6px;
+    border-left: 3px solid #4a3728;
+    padding-left: 8px;
+  }
+  .draft-section p { font-size: .93rem; line-height: 1.8; color: #333; }
+
+  @media (max-width: 600px) {
+    .type-btns { flex-direction: column; }
+    .parse-grid { grid-template-columns: 90px 1fr; }
+    table { font-size: .8rem; }
+    th, td { padding: 7px 8px; }
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>📋 學校行政公文系統</h1>
+  <nav class="tab-nav">
+    <button class="tab-btn active" onclick="switchTab('compose')">✍️ 撰稿</button>
+    <button class="tab-btn" onclick="switchTab('tracker')">📊 追蹤</button>
+    <button class="tab-btn" onclick="switchTab('settings')">⚙️ 設定</button>
+  </nav>
+</header>
+
+<div class="container">
+
+  <!-- ══════════════ 撰稿頁 ══════════════ -->
+  <div id="page-compose" class="page active">
+
+    <!-- API Key 提示 -->
+    <div class="api-banner" id="api-banner">
+      <span>🔑 請先輸入 Gemini API Key 才能使用 AI 功能（<a href="https://aistudio.google.com/app/apikey" target="_blank" style="color:#795548;font-weight:700;">免費申請點這裡</a>）</span>
+      <input type="text" id="api-key-inline" placeholder="貼上你的 Gemini API Key">
+      <button class="btn btn-primary btn-sm" onclick="saveApiKey()">儲存</button>
+    </div>
+
+    <!-- 區塊一：類型 -->
+    <div class="card">
+      <h2>📝 選擇公文類型</h2>
+      <div class="type-btns">
+        <button class="type-btn active" onclick="setType('sign', this)">☑️ 簽</button>
+        <button class="type-btn" onclick="setType('letter', this)">📨 函</button>
+        <button class="type-btn" onclick="setType('draft', this)">📋 擬辦</button>
+      </div>
+      <p id="type-desc" style="font-size:.83rem;color:#888;margin-top:10px;">
+        【簽請繁核】內部公文，向長官請示。含主旨、說明、擬辦。
+      </p>
+
+      <!-- 函 專屬選項（只在選函時顯示） -->
+      <div id="letter-options" style="display:none;margin-top:16px;padding-top:16px;border-top:1px solid #ede8e3;">
+        <div style="display:flex;gap:16px;flex-wrap:wrap;align-items:flex-start;">
+          <div style="flex:1;min-width:200px;">
+            <p style="font-size:.83rem;color:#666;margin-bottom:8px;font-weight:600;">受文者層級</p>
+            <div style="display:flex;gap:8px;flex-wrap:wrap;">
+              <button class="receiver-btn active" onclick="setReceiver('superior', this)">📤 上級機關<br><span style="font-size:.75rem;font-weight:400;">（教育局等）</span></button>
+              <button class="receiver-btn" onclick="setReceiver('parallel', this)">↔️ 平行機關<br><span style="font-size:.75rem;font-weight:400;">（同層級單位）</span></button>
+              <button class="receiver-btn" onclick="setReceiver('inferior', this)">📥 下級機關<br><span style="font-size:.75rem;font-weight:400;">（所屬單位）</span></button>
+            </div>
+          </div>
+          <div style="min-width:140px;">
+            <p style="font-size:.83rem;color:#666;margin-bottom:8px;font-weight:600;">產出格式</p>
+            <div style="display:flex;gap:8px;">
+              <button class="format-btn active" onclick="setLetterFormat('draft', this)">📝 函稿</button>
+              <button class="format-btn" onclick="setLetterFormat('final', this)">📨 函</button>
+            </div>
+          </div>
+        </div>
+        <p id="receiver-desc" style="font-size:.8rem;color:#888;margin-top:10px;">主旨結尾：「敬請鑒核。」｜說明引述用「奉」</p>
+      </div>
+    </div>
+
+    <!-- 區塊二：來文輸入 -->
+    <div class="card">
+      <h2>📥 來文內容</h2>
+
+      <label>公文目的與用意（主旨）<span class="opt">選填，可讓 AI 自動判斷</span></label>
+      <input type="text" id="purpose" placeholder="例：擬請學校派員參加教育局AI研習">
+
+      <label>來文內容 / 辦理依據<span class="req">*</span></label>
+      <textarea id="source-text" rows="5" placeholder="貼上來文內容，AI 會協助分析重點..."></textarea>
+
+      <!-- 上傳區 -->
+      <div class="upload-area" onclick="document.getElementById('file-input').click()">
+        <div class="icon">📎</div>
+        <p>點擊上傳來文（PDF / 圖片 / TXT）</p>
+        <p style="font-size:.8rem">AI 會自動辨識文字內容</p>
+        <input type="file" id="file-input" accept=".pdf,.png,.jpg,.jpeg,.txt" onchange="handleFileUpload(event)">
+      </div>
+      <div class="file-preview" id="file-preview">
+        <span id="file-name">📄 檔案名稱</span>
+        <button onclick="clearFile()" title="移除檔案">✕</button>
+      </div>
+
+      <!-- 解析確認 -->
+      <div class="parse-result" id="parse-result">
+        <h3>✅ AI 解析結果，請確認後再產稿</h3>
+        <div class="parse-grid">
+          <span class="key">來文機關：</span>
+          <input type="text" id="pr-org" placeholder="（未識別）">
+          <span class="key">文號：</span>
+          <input type="text" id="pr-docno" placeholder="（未識別）">
+          <span class="key">主旨摘要：</span>
+          <input type="text" id="pr-subject" placeholder="（未識別）">
+          <span class="key">辦理期限：</span>
+          <input type="text" id="pr-deadline" placeholder="例：114年7月31日 或 無期限要求">
+        </div>
+        <div class="parse-actions">
+          <button class="btn btn-primary btn-sm" onclick="generateDoc()">✅ 確認，開始產稿</button>
+          <button class="btn btn-outline btn-sm" onclick="dismissParse()">略過解析</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- 區塊三：擬辦建議（非擬辦模式也可填） -->
+    <div class="card" id="extra-card">
+      <h2>💡 擬辦建議要點 <span style="font-size:.8rem;color:#aaa;font-weight:400">（選填）</span></h2>
+      <textarea id="suggestions" rows="3" placeholder="請條列建議，如：1.派教務處一人參加。2.公假派代。3.報名截止日前回覆。"></textarea>
+
+      <div id="addon-section">
+        <label>附件名稱 <span class="opt">選填</span></label>
+        <input type="text" id="attachments" placeholder="例：研習簡章一份">
+      </div>
+    </div>
+
+    <!-- 產稿按鈕 -->
+    <div style="display:flex;gap:12px;margin-bottom:20px;justify-content:center;">
+      <button class="btn btn-primary" id="generate-btn" onclick="generateDoc()" style="padding:12px 36px;font-size:1rem;">
+        ✨ AI 強化撰稿
+      </button>
+      <button class="btn btn-outline" onclick="resetForm()">🔄 重設</button>
+    </div>
+
+    <!-- Loading -->
+    <div class="loading" id="loading">
+      <div class="spinner"></div>
+      <p>AI 正在撰稿中，請稍候...</p>
+    </div>
+
+    <!-- 輸出 -->
+    <div class="output-area" id="output-area">
+      <div class="card">
+        <div class="output-header">
+          <h2>📄 AI 產稿結果</h2>
+          <div style="display:flex;gap:8px;">
+            <button class="btn btn-outline btn-sm" onclick="copyOutput()">📋 複製</button>
+            <button class="btn btn-primary btn-sm" onclick="saveToTracker()">💾 存入追蹤</button>
+          </div>
+        </div>
+        <div class="output-content" id="output-content"></div>
+        <div class="output-actions">
+          <button class="btn btn-outline btn-sm" onclick="regenerate()">🔄 重新產稿</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ══════════════ 追蹤頁 ══════════════ -->
+  <div id="page-tracker" class="page">
+
+    <!-- 統計 -->
+    <div class="stats-row">
+      <div class="stat-card"><div class="num" id="stat-total">0</div><div class="label">全部公文</div></div>
+      <div class="stat-card"><div class="num" id="stat-pending" style="color:#856404">0</div><div class="label">待辦</div></div>
+      <div class="stat-card"><div class="num" id="stat-urgent" style="color:#c0392b">0</div><div class="label">緊急（3天內）</div></div>
+      <div class="stat-card"><div class="num" id="stat-done" style="color:#27ae60">0</div><div class="label">已結案</div></div>
+    </div>
+
+    <!-- 篩選 + 新增 -->
+    <div class="filter-row">
+      <button class="filter-btn active" onclick="filterTracker('all', this)">全部</button>
+      <button class="filter-btn" onclick="filterTracker('pending', this)">待辦</button>
+      <button class="filter-btn" onclick="filterTracker('progress', this)">處理中</button>
+      <button class="filter-btn" onclick="filterTracker('done', this)">已結案</button>
+      <button class="filter-btn" onclick="filterTracker('urgent', this)">⚠️ 緊急</button>
+      <div style="flex:1"></div>
+      <button class="btn btn-primary btn-sm" onclick="openAddModal()">＋ 手動新增</button>
+    </div>
+
+    <div class="card" style="padding:0;overflow:hidden;">
+      <table id="tracker-table">
+        <thead>
+          <tr>
+            <th>收文日期</th>
+            <th>來文機關</th>
+            <th>主旨摘要</th>
+            <th>類型</th>
+            <th>辦理期限</th>
+            <th>狀態</th>
+            <th>操作</th>
+          </tr>
+        </thead>
+        <tbody id="tracker-body">
+        </tbody>
+      </table>
+      <div class="empty-state" id="tracker-empty">
+        <div class="icon">📭</div>
+        <p>尚無公文紀錄<br>撰稿後點「存入追蹤」即可加入</p>
+      </div>
+    </div>
+  </div>
+
+  <!-- ══════════════ 設定頁 ══════════════ -->
+  <div id="page-settings" class="page">
+    <div class="card">
+      <h2>🔑 Gemini API Key</h2>
+      <p style="font-size:.85rem;color:#888;margin-bottom:12px;">
+        前往 <a href="https://aistudio.google.com/app/apikey" target="_blank" style="color:#4a3728;">Google AI Studio</a> 取得免費 API Key
+      </p>
+      <input type="text" id="api-key-setting" placeholder="貼上 Gemini API Key" style="margin-bottom:10px;">
+      <button class="btn btn-primary" onclick="saveApiKey()">儲存 API Key</button>
+      <p id="key-status" style="font-size:.85rem;color:#27ae60;margin-top:8px;display:none;">✅ 已儲存</p>
+    </div>
+
+    <div class="card">
+      <h2>🏫 學校基本資料</h2>
+      <label>學校名稱</label>
+      <input type="text" id="school-name" placeholder="例：新北市光復國民小學">
+      <label>承辦人</label>
+      <input type="text" id="officer-name" placeholder="例：方○○">
+      <label>職稱</label>
+      <input type="text" id="officer-title" placeholder="例：資訊組長">
+      <div style="margin-top:14px;">
+        <button class="btn btn-primary" onclick="saveSettings()">儲存設定</button>
+      </div>
+      <p id="settings-status" style="font-size:.85rem;color:#27ae60;margin-top:8px;display:none;">✅ 已儲存</p>
+    </div>
+
+    <div class="card">
+      <h2>📊 Google Sheets 同步</h2>
+      <p style="font-size:.85rem;color:#888;margin-bottom:4px;">將公文追蹤資料儲存到 Google Sheets，方便多裝置查看與備份。</p>
+      <p style="font-size:.83rem;color:#b07d40;margin-bottom:12px;">⚠️ 需先依下方步驟建立 Apps Script，再將網址貼入此處。</p>
+      <label>Apps Script 網址</label>
+      <input type="text" id="sheets-url" placeholder="https://script.google.com/macros/s/.../exec">
+      <div style="margin-top:10px;display:flex;gap:8px;flex-wrap:wrap;">
+        <button class="btn btn-primary" onclick="saveSheetsUrl()">儲存網址</button>
+        <button class="btn btn-outline" onclick="testSheetsConnection()">測試連線</button>
+        <button class="btn btn-outline" onclick="syncFromSheets()">⬇️ 從 Sheets 同步</button>
+        <button class="btn btn-outline" onclick="uploadToSheets()">⬆️ 上傳本機資料到 Sheets</button>
+      </div>
+      <p id="sheets-status" style="font-size:.85rem;margin-top:8px;display:none;"></p>
+
+      <div style="margin-top:18px;background:#f9f6f2;border-radius:8px;padding:14px;">
+        <p style="font-size:.85rem;font-weight:700;color:#4a3728;margin-bottom:10px;">📋 Apps Script 建立步驟</p>
+        <ol style="font-size:.82rem;color:#555;line-height:2;padding-left:18px;">
+          <li>開啟 <a href="https://sheets.google.com" target="_blank" style="color:#4a3728;font-weight:600;">Google Sheets</a>，建立新試算表，命名「公文追蹤」</li>
+          <li>點選選單「擴充功能」→「Apps Script」</li>
+          <li>將下方程式碼完整貼入，取代原有內容</li>
+          <li>點「部署」→「新增部署作業」→類型選「網頁應用程式」</li>
+          <li>執行身分：「我」，存取權：「任何人」→ 點「部署」</li>
+          <li>複製產生的網址，貼到上方欄位</li>
+        </ol>
+        <div style="position:relative;margin-top:10px;">
+          <textarea id="apps-script-code" readonly rows="12" style="font-size:.75rem;font-family:monospace;background:#fff;color:#333;resize:none;width:100%;border:1px solid #ddd;border-radius:6px;padding:10px;">const SHEET_NAME = '公文追蹤';
+
+function doGet(e) {
+  const action = e.parameter.action || 'getAll';
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  let sheet = ss.getSheetByName(SHEET_NAME);
+  if (!sheet) {
+    sheet = ss.insertSheet(SHEET_NAME);
+    sheet.appendRow(['id','date','org','subject','type','deadline','status','content']);
+  }
+
+  if (action === 'getAll') {
+    const data = sheet.getDataRange().getValues();
+    if (data.length <= 1) return ok([]);
+    const headers = data[0];
+    const records = data.slice(1).map(row => {
+      const o = {};
+      headers.forEach((h, i) => o[h] = row[i]);
+      return o;
+    });
+    return ok(records);
+  }
+
+  if (action === 'add') {
+    const r = e.parameter;
+    sheet.appendRow([r.id, r.date, r.org, r.subject, r.type, r.deadline, r.status || 'pending', decodeURIComponent(r.content || '')]);
+    return ok('added');
+  }
+
+  if (action === 'updateStatus') {
+    const data = sheet.getDataRange().getValues();
+    for (let i = 1; i < data.length; i++) {
+      if (String(data[i][0]) === String(e.parameter.id)) {
+        sheet.getRange(i + 1, 7).setValue(e.parameter.status);
+        break;
+      }
+    }
+    return ok('updated');
+  }
+
+  if (action === 'delete') {
+    const data = sheet.getDataRange().getValues();
+    for (let i = 1; i < data.length; i++) {
+      if (String(data[i][0]) === String(e.parameter.id)) {
+        sheet.deleteRow(i + 1);
+        break;
+      }
+    }
+    return ok('deleted');
+  }
+
+  if (action === 'clearAll') {
+    const lastRow = sheet.getLastRow();
+    if (lastRow > 1) sheet.deleteRows(2, lastRow - 1);
+    return ok('cleared');
+  }
+
+  return ok('unknown action');
+}
+
+function ok(data) {
+  return ContentService
+    .createTextOutput(JSON.stringify({ status: 'ok', data: data }))
+    .setMimeType(ContentService.MimeType.JSON);
+}</textarea>
+          <button class="btn btn-outline btn-sm" onclick="copyScript()" style="margin-top:6px;">📋 複製程式碼</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>🗑️ 資料管理</h2>
+      <p style="font-size:.85rem;color:#888;margin-bottom:12px;">清除所有追蹤紀錄（不影響 API Key 和學校設定）</p>
+      <button class="btn btn-danger btn-sm" onclick="clearAllRecords()">清除全部公文紀錄</button>
+    </div>
+  </div>
+
+</div><!-- /container -->
+
+<!-- ══ 手動新增 Modal ══ -->
+<div id="modal-overlay" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.4);z-index:100;align-items:center;justify-content:center;">
+  <div style="background:#fff;border-radius:14px;padding:28px;width:90%;max-width:500px;box-shadow:0 8px 32px rgba(0,0,0,.2);">
+    <h3 style="margin-bottom:16px;color:#4a3728;">新增公文紀錄</h3>
+    <label>收文日期</label>
+    <input type="text" id="m-date" placeholder="例：114/06/07">
+    <label>來文機關</label>
+    <input type="text" id="m-org" placeholder="例：新北市教育局">
+    <label>主旨摘要<span class="req">*</span></label>
+    <input type="text" id="m-subject" placeholder="">
+    <label>公文類型</label>
+    <select id="m-type" style="width:100%;margin-top:2px;">
+      <option value="sign">簽</option>
+      <option value="letter">函</option>
+      <option value="draft">擬辦</option>
+    </select>
+    <label>辦理期限</label>
+    <input type="text" id="m-deadline" placeholder="例：114/07/31 或 無">
+    <div style="display:flex;gap:10px;margin-top:18px;">
+      <button class="btn btn-primary" onclick="addManualRecord()">新增</button>
+      <button class="btn btn-outline" onclick="closeModal()">取消</button>
+    </div>
+  </div>
+</div>
+
+<script>
+// ════════════════════════════════
+//  狀態與資料
+// ════════════════════════════════
+let currentType = 'sign';
+let currentReceiver = 'superior'; // superior / parallel / inferior
+let currentLetterFormat = 'draft'; // draft / final
+let uploadedFile = null;
+let parsedData = {};
+let trackerData = JSON.parse(localStorage.getItem('trackerData') || '[]');
+let currentFilter = 'all';
+let lastGeneratedDoc = null;
+
+const receiverDesc = {
+  superior: '主旨結尾：「敬請鑒核。」｜說明引述用「奉」｜適用教育局、縣市政府等上級',
+  parallel: '主旨結尾：「請查照。」或「請惠予照辦。」｜適用同層級機關、學校',
+  inferior: '主旨結尾：「請照辦。」｜適用所屬單位、家長、廠商'
+};
+
+const typeDesc = {
+  sign: '【簽請繁核】內部公文，向長官請示。含主旨、說明、擬辦。',
+  letter: '【函】對外行文，有固定格式：主旨、說明、辦法/請　照辦。',
+  draft: '【擬辦】不產生完整公文，只輸出：案情摘要、建議處理、期限提醒、陳核重點。'
+};
+
+// ════════════════════════════════
+//  初始化
+// ════════════════════════════════
+window.onload = function() {
+  const key = localStorage.getItem('geminiKey');
+  if (key) {
+    document.getElementById('api-banner').style.display = 'none';
+    document.getElementById('api-key-setting').value = key;
+    document.getElementById('api-key-inline').value = key;
+  }
+  document.getElementById('school-name').value = localStorage.getItem('schoolName') || '';
+  document.getElementById('officer-name').value = localStorage.getItem('officerName') || '';
+  document.getElementById('officer-title').value = localStorage.getItem('officerTitle') || '';
+  document.getElementById('sheets-url').value = localStorage.getItem('sheetsUrl') || '';
+
+  // 今天日期預設
+  const today = new Date();
+  const roc = today.getFullYear() - 1911;
+  document.getElementById('m-date').value = `${roc}/${String(today.getMonth()+1).padStart(2,'0')}/${String(today.getDate()).padStart(2,'0')}`;
+
+  renderTracker();
+};
+
+// ════════════════════════════════
+//  Tab 切換
+// ════════════════════════════════
+function switchTab(name) {
+  document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+  document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+  document.getElementById('page-' + name).classList.add('active');
+  event.target.classList.add('active');
+  if (name === 'tracker') renderTracker();
+}
+
+// ════════════════════════════════
+//  公文類型
+// ════════════════════════════════
+function setType(type, btn) {
+  currentType = type;
+  document.querySelectorAll('.type-btn').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+  document.getElementById('type-desc').textContent = typeDesc[type];
+  document.getElementById('letter-options').style.display = type === 'letter' ? 'block' : 'none';
+}
+
+function setReceiver(receiver, btn) {
+  currentReceiver = receiver;
+  document.querySelectorAll('.receiver-btn').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+  document.getElementById('receiver-desc').textContent = receiverDesc[receiver];
+}
+
+function setLetterFormat(format, btn) {
+  currentLetterFormat = format;
+  document.querySelectorAll('.format-btn').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+}
+
+// ════════════════════════════════
+//  API Key
+// ════════════════════════════════
+function saveApiKey() {
+  const key = document.getElementById('api-key-inline').value.trim() ||
+              document.getElementById('api-key-setting').value.trim();
+  if (!key) { alert('請輸入 API Key'); return; }
+  localStorage.setItem('geminiKey', key);
+  document.getElementById('api-banner').style.display = 'none';
+  document.getElementById('api-key-setting').value = key;
+  document.getElementById('key-status').style.display = 'block';
+  setTimeout(() => document.getElementById('key-status').style.display = 'none', 2000);
+}
+
+function saveSettings() {
+  localStorage.setItem('schoolName', document.getElementById('school-name').value);
+  localStorage.setItem('officerName', document.getElementById('officer-name').value);
+  localStorage.setItem('officerTitle', document.getElementById('officer-title').value);
+  document.getElementById('settings-status').style.display = 'block';
+  setTimeout(() => document.getElementById('settings-status').style.display = 'none', 2000);
+}
+
+// ════════════════════════════════
+//  檔案上傳
+// ════════════════════════════════
+async function handleFileUpload(event) {
+  const file = event.target.files[0];
+  if (!file) return;
+  uploadedFile = file;
+  document.getElementById('file-name').textContent = '📄 ' + file.name;
+  document.getElementById('file-preview').classList.add('show');
+
+  const key = localStorage.getItem('geminiKey');
+  if (!key) { alert('請先設定 Gemini API Key'); return; }
+
+  // 讀取檔案
+  const content = await readFile(file);
+  await parseDocument(content, file.type, key);
+}
+
+function readFile(file) {
+  return new Promise((resolve) => {
+    if (file.type === 'text/plain') {
+      const reader = new FileReader();
+      reader.onload = e => resolve({ type: 'text', data: e.target.result });
+      reader.readAsText(file);
+    } else {
+      const reader = new FileReader();
+      reader.onload = e => resolve({ type: 'base64', data: e.target.result.split(',')[1], mimeType: file.type });
+      reader.readAsDataURL(file);
+    }
+  });
+}
+
+async function parseDocument(content, fileType, key) {
+  const prompt = `請從以下公文內容中提取關鍵資訊，以 JSON 格式回傳：
+{
+  "org": "來文機關（如：新北市教育局）",
+  "docno": "文號（如：新北教資字第1131234567號）",
+  "subject": "主旨摘要（一句話）",
+  "deadline": "辦理期限（如：114年7月31日 或 無期限要求）"
+}
+只回傳 JSON，不要其他文字。`;
+
+  try {
+    let parts = [];
+    if (content.type === 'text') {
+      parts = [{ text: prompt + '\n\n來文內容：\n' + content.data }];
+    } else {
+      parts = [
+        { text: prompt },
+        { inline_data: { mime_type: content.mimeType, data: content.data } }
+      ];
+    }
+
+    const res = await callGemini(parts, key);
+    const jsonMatch = res.match(/\{[\s\S]*\}/);
+    if (jsonMatch) {
+      parsedData = JSON.parse(jsonMatch[0]);
+      document.getElementById('pr-org').value = parsedData.org || '';
+      document.getElementById('pr-docno').value = parsedData.docno || '';
+      document.getElementById('pr-subject').value = parsedData.subject || '';
+      document.getElementById('pr-deadline').value = parsedData.deadline || '';
+      document.getElementById('parse-result').classList.add('show');
+
+      // 若來文文字可提取，填入文字框
+      if (content.type === 'text') {
+        document.getElementById('source-text').value = content.data;
+      }
+    }
+  } catch(e) {
+    console.error(e);
+    document.getElementById('parse-result').classList.add('show');
+  }
+}
+
+function clearFile() {
+  uploadedFile = null;
+  document.getElementById('file-input').value = '';
+  document.getElementById('file-preview').classList.remove('show');
+  document.getElementById('parse-result').classList.remove('show');
+}
+
+function dismissParse() {
+  document.getElementById('parse-result').classList.remove('show');
+}
+
+// ════════════════════════════════
+//  呼叫 Gemini API
+// ════════════════════════════════
+async function callGemini(parts, key, retries = 3) {
+  const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${key}`;
+  const body = { contents: [{ parts }] };
+  const res = await fetch(url, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body)
+  });
+  if (!res.ok) {
+    const err = await res.json();
+    const msg = err.error?.message || '';
+    // 若是速率限制且還有重試次數，等待後自動重試
+    const retryMatch = msg.match(/retry in ([\d.]+)s/i);
+    if (retryMatch && retries > 0) {
+      const waitMs = Math.ceil(parseFloat(retryMatch[1]) * 1000) + 500;
+      document.querySelector('#loading p').textContent = `⏳ 超過速率限制，${Math.ceil(waitMs/1000)} 秒後自動重試...`;
+      await new Promise(r => setTimeout(r, waitMs));
+      return callGemini(parts, key, retries - 1);
+    }
+    if (msg.includes('quota') || msg.includes('QUOTA')) {
+      throw new Error('API 配額已用完。請至 aistudio.google.com 確認你的 API Key 是否仍有免費額度，或改用其他帳號的 Key。');
+    }
+    throw new Error(msg || '呼叫 Gemini 失敗');
+  }
+  document.querySelector('#loading p').textContent = 'AI 正在撰稿中，請稍候...';
+  const data = await res.json();
+  return data.candidates?.[0]?.content?.parts?.[0]?.text || '';
+}
+
+// ════════════════════════════════
+//  產稿
+// ════════════════════════════════
+async function generateDoc() {
+  const key = localStorage.getItem('geminiKey');
+  if (!key) { alert('請先設定 Gemini API Key（設定頁）'); return; }
+
+  const sourceText = document.getElementById('source-text').value.trim();
+  const purpose = document.getElementById('purpose').value.trim();
+  const suggestions = document.getElementById('suggestions').value.trim();
+  const attachments = document.getElementById('attachments').value.trim();
+
+  // 取得解析資料
+  const org = document.getElementById('pr-org')?.value || parsedData.org || '';
+  const docno = document.getElementById('pr-docno')?.value || parsedData.docno || '';
+  const subject = document.getElementById('pr-subject')?.value || parsedData.subject || '';
+  const deadline = document.getElementById('pr-deadline')?.value || parsedData.deadline || '';
+
+  if (!sourceText && !subject) {
+    alert('請輸入來文內容或主旨');
+    return;
+  }
+
+  const schoolName = localStorage.getItem('schoolName') || '本校';
+  const officerName = localStorage.getItem('officerName') || '';
+  const officerTitle = localStorage.getItem('officerTitle') || '';
+
+  let prompt = '';
+
+  if (currentType === 'sign') {
+    prompt = `你是台灣國民小學的行政人員，請依照正式公文格式撰寫「簽」。
+
+【學校】${schoolName}
+【承辦人】${officerTitle} ${officerName}
+【公文目的】${purpose || '請根據來文內容自動判斷'}
+【來文機關】${org}
+【來文文號】${docno}
+【來文主旨】${subject}
+【來文內容摘要】${sourceText}
+【辦理期限】${deadline}
+【擬辦建議】${suggestions}
+【附件】${attachments}
+
+請按以下格式輸出，注意事項：
+1. 不可使用任何 markdown 語法（不可有 **、*、# 等符號）
+2. 「簽請校長核示」等敬語不加空格
+3. 文字精簡，符合公文語氣，不可用口語
+
+主　旨：（一行，結尾如「簽請校長核示。」）
+
+說　明：
+一、（來文機關及文號引述）
+二、（說明背景或重要訊息）
+三、（如有期限或注意事項）
+
+擬　辦：
+一、（具體建議一）
+二、（具體建議二，如有）
+
+承辦人：${officerName}（${officerTitle}）
+日　期：民國　　年　　月　　日`;
+
+  } else if (currentType === 'letter') {
+    const receiverLevel = { superior: '上級機關（如教育局、縣市政府）', parallel: '平行機關（同層級單位或學校）', inferior: '下級機關（所屬單位、廠商或家長）' }[currentReceiver];
+    const closingPhrase = { superior: '敬請鑒核。', parallel: '請查照。', inferior: '請照辦。' }[currentReceiver];
+    const refWord = currentReceiver === 'superior' ? '奉' : '依據';
+    const isDraft = currentLetterFormat === 'draft';
+
+    prompt = `你是台灣國民小學的行政人員，請依照正式公文書格式撰寫「${isDraft ? '函稿' : '函'}」。
+
+【學校】${schoolName}
+【承辦人】${officerTitle} ${officerName}
+【受文者層級】${receiverLevel}
+【公文目的】${purpose || '請根據來文內容自動判斷'}
+【來文機關】${org}
+【來文文號】${docno}
+【來文主旨】${subject}
+【來文內容摘要】${sourceText}
+【辦理期限】${deadline}
+【辦理方式建議】${suggestions}
+【附件】${attachments}
+
+格式規定（嚴格遵守）：
+1. 不可使用任何 markdown 語法（不可有 **、*、# 等符號）
+2. 主旨結尾固定為「${closingPhrase}」，不可更改
+3. 說明段引述來文用「${refWord}」開頭
+4. 層級為上級機關時：說明段用「奉貴局...」，辦法段改為「謹陳」結尾
+5. 層級為平行機關時：說明段用「依據...」，辦法段用「請查照。」
+6. 層級為下級機關時：說明段用「依據...」，辦法段用「請照辦。」
+7. 嚴禁在任何詞語之間加入空格，包括「貴局」「貴校」「查照」「鑒核」「照辦」等詞前後均不加空格
+8. 主旨、說明、辦法各段落內容不得有任何多餘空格
+
+請按以下格式輸出：
+
+${isDraft ? '（函稿）\n' : ''}受文者：
+發文日期：中華民國　　年　　月　　日
+發文字號：${schoolName}　　字第　　　　號
+速　別：普通件
+密等及解密條件：普通
+附　件：${attachments || '無'}
+
+主　旨：（一行，結尾「${closingPhrase}」）
+
+說　明：
+一、（${refWord}引述來文或依據）
+二、（說明事由或背景）
+三、（如有期限或注意事項，否則省略）
+
+辦　法：
+一、（具體辦理事項，如無則省略整段）
+
+正　本：（受文者名稱）
+副　本：（如有副本，否則省略）`;
+
+  } else {
+    // 擬辦模式
+    prompt = `你是台灣國民小學的行政人員，請針對以下來文提供「擬辦分析」，不要產生完整的簽或函。
+
+【來文機關】${org}
+【來文文號】${docno}
+【來文主旨】${subject}
+【來文內容】${sourceText}
+【辦理期限】${deadline}
+【執行方法建議】${suggestions}
+
+請嚴格按照以下格式輸出，每個區塊一定要有內容：
+
+【案情摘要】
+（一句話說清楚這份公文要求什麼）
+
+【建議處理方式】
+1.
+2.
+3. （如有）
+
+【期限提醒】
+（明確說明是否有期限、何時截止、是否需要回函）
+
+【陳核重點】
+（呈校長時應說明的 2-3 個關鍵點）
+
+【備注】
+（其他注意事項，如無則填「無」）`;
+  }
+
+  // 顯示 loading
+  document.getElementById('loading').classList.add('show');
+  document.getElementById('output-area').classList.remove('show');
+  document.getElementById('generate-btn').disabled = true;
+
+  try {
+    let parts = [{ text: prompt }];
+
+    // 如果有上傳圖片/PDF，一起送
+    if (uploadedFile && uploadedFile.type !== 'text/plain') {
+      const content = await readFile(uploadedFile);
+      parts.push({ inline_data: { mime_type: content.mimeType, data: content.data } });
+    }
+
+    const result = await callGemini(parts, key);
+    lastGeneratedDoc = {
+      type: currentType,
+      org: org || document.getElementById('pr-org').value,
+      docno,
+      subject: subject || purpose,
+      deadline,
+      content: result,
+      date: (() => { const t = new Date(); const r = t.getFullYear()-1911; return `${r}/${String(t.getMonth()+1).padStart(2,'0')}/${String(t.getDate()).padStart(2,'0')}`; })()
+    };
+
+    document.getElementById('output-content').textContent = result;
+    document.getElementById('output-area').classList.add('show');
+
+  } catch(e) {
+    alert('❌ 產稿失敗：' + e.message);
+  } finally {
+    document.getElementById('loading').classList.remove('show');
+    document.getElementById('generate-btn').disabled = false;
+  }
+}
+
+function regenerate() { generateDoc(); }
+
+function copyOutput() {
+  const text = document.getElementById('output-content').textContent;
+  navigator.clipboard.writeText(text).then(() => {
+    alert('✅ 已複製到剪貼簿');
+  });
+}
+
+// ════════════════════════════════
+//  重設
+// ════════════════════════════════
+function resetForm() {
+  document.getElementById('purpose').value = '';
+  document.getElementById('source-text').value = '';
+  document.getElementById('suggestions').value = '';
+  document.getElementById('attachments').value = '';
+  clearFile();
+  document.getElementById('output-area').classList.remove('show');
+  document.getElementById('loading').classList.remove('show');
+}
+
+// ════════════════════════════════
+//  Google Sheets 工具函式
+// ════════════════════════════════
+function getSheetsUrl() {
+  return localStorage.getItem('sheetsUrl') || '';
+}
+function saveSheetsUrl() {
+  const url = document.getElementById('sheets-url').value.trim();
+  if (!url) { alert('請輸入 Apps Script 網址'); return; }
+  localStorage.setItem('sheetsUrl', url);
+  showSheetsStatus('✅ 網址已儲存', '#27ae60');
+}
+function showSheetsStatus(msg, color) {
+  const el = document.getElementById('sheets-status');
+  el.textContent = msg;
+  el.style.color = color || '#27ae60';
+  el.style.display = 'block';
+  setTimeout(() => el.style.display = 'none', 3000);
+}
+function copyScript() {
+  const code = document.getElementById('apps-script-code').value;
+  navigator.clipboard.writeText(code).then(() => alert('✅ 程式碼已複製'));
+}
+
+async function sheetsRequest(params) {
+  const url = getSheetsUrl();
+  if (!url) return null;
+  const qs = new URLSearchParams(params).toString();
+  try {
+    const res = await fetch(`${url}?${qs}`);
+    return await res.json();
+  } catch(e) {
+    console.error('Sheets 連線失敗', e);
+    return null;
+  }
+}
+
+async function testSheetsConnection() {
+  const url = getSheetsUrl();
+  if (!url) { alert('請先填入並儲存 Apps Script 網址'); return; }
+  showSheetsStatus('⏳ 測試連線中...', '#888');
+  const res = await sheetsRequest({ action: 'getAll' });
+  if (res && res.status === 'ok') {
+    showSheetsStatus(`✅ 連線成功！Sheets 中有 ${res.data.length} 筆資料`, '#27ae60');
+  } else {
+    showSheetsStatus('❌ 連線失敗，請確認網址是否正確', '#c0392b');
+  }
+}
+
+async function uploadToSheets() {
+  if (!getSheetsUrl()) { alert('請先設定 Google Sheets 連線'); return; }
+  if (!trackerData.length) { alert('本機沒有資料可上傳'); return; }
+  if (!confirm(`確定要把本機 ${trackerData.length} 筆資料上傳到 Sheets？`)) return;
+  showSheetsStatus('⏳ 上傳中...', '#888');
+  let ok = 0, fail = 0;
+  for (const r of trackerData) {
+    const res = await sheetsRequest({
+      action: 'add', id: r.id, date: r.date, org: r.org,
+      subject: r.subject, type: r.type, deadline: r.deadline,
+      status: r.status, content: encodeURIComponent((r.content||'').substring(0,800))
+    });
+    res?.status === 'ok' ? ok++ : fail++;
+    await new Promise(r => setTimeout(r, 400));
+  }
+  showSheetsStatus(`✅ 上傳完成：${ok} 筆成功${fail ? '，'+fail+' 筆失敗' : ''}`, '#27ae60');
+}
+
+async function syncFromSheets() {
+  if (!getSheetsUrl()) { alert('請先設定 Google Sheets 連線'); return; }
+  showSheetsStatus('⏳ 從 Sheets 同步中...', '#888');
+  const res = await sheetsRequest({ action: 'getAll' });
+  if (res && res.status === 'ok') {
+    trackerData = res.data.map(r => ({
+      id: r.id || Date.now(),
+      date: r.date || '',
+      org: r.org || '',
+      subject: r.subject || '',
+      type: r.type || 'sign',
+      deadline: r.deadline || '無',
+      status: r.status || 'pending',
+      content: r.content || ''
+    }));
+    localStorage.setItem('trackerData', JSON.stringify(trackerData));
+    renderTracker();
+    showSheetsStatus(`✅ 已同步 ${trackerData.length} 筆資料`, '#27ae60');
+  } else {
+    showSheetsStatus('❌ 同步失敗', '#c0392b');
+  }
+}
+
+async function addToSheets(record) {
+  if (!getSheetsUrl()) return;
+  await sheetsRequest({
+    action: 'add',
+    id: record.id,
+    date: record.date,
+    org: record.org,
+    subject: record.subject,
+    type: record.type,
+    deadline: record.deadline,
+    status: record.status,
+    content: encodeURIComponent((record.content || '').substring(0, 800))
+  });
+}
+
+async function updateStatusInSheets(id, status) {
+  if (!getSheetsUrl()) return;
+  await sheetsRequest({ action: 'updateStatus', id, status });
+}
+
+async function deleteFromSheets(id) {
+  if (!getSheetsUrl()) return;
+  await sheetsRequest({ action: 'delete', id });
+}
+
+async function clearAllFromSheets() {
+  if (!getSheetsUrl()) return;
+  await sheetsRequest({ action: 'clearAll' });
+}
+
+// ════════════════════════════════
+//  存入追蹤
+// ════════════════════════════════
+async function saveToTracker() {
+  if (!lastGeneratedDoc) return;
+  const record = {
+    id: Date.now(),
+    date: lastGeneratedDoc.date,
+    org: lastGeneratedDoc.org || '（未填）',
+    subject: lastGeneratedDoc.subject || '（未填）',
+    type: lastGeneratedDoc.type,
+    deadline: lastGeneratedDoc.deadline || '無',
+    status: 'pending',
+    content: lastGeneratedDoc.content
+  };
+  trackerData.unshift(record);
+  localStorage.setItem('trackerData', JSON.stringify(trackerData));
+  renderTracker();
+  // 同步到 Sheets
+  if (getSheetsUrl()) {
+    await addToSheets(record);
+    alert('✅ 已存入追蹤，並同步到 Google Sheets！');
+  } else {
+    alert('✅ 已存入本機追蹤！（尚未設定 Google Sheets）');
+  }
+}
+
+// ════════════════════════════════
+//  追蹤表
+// ════════════════════════════════
+const typeLabel = { sign: '簽', letter: '函', draft: '擬辦' };
+const typeBadge = { sign: 'badge-sign', letter: 'badge-letter', draft: 'badge-draft' };
+const statusLabel = { pending: '待辦', progress: '處理中', done: '已結案', urgent: '緊急' };
+const statusBadge = { pending: 'badge-pending', progress: 'badge-progress', done: 'badge-done', urgent: 'badge-urgent' };
+
+function daysUntilDeadline(deadlineStr) {
+  if (!deadlineStr || deadlineStr === '無' || deadlineStr.includes('無')) return null;
+  // 解析民國年
+  const match = deadlineStr.match(/(\d+)[\/年](\d+)[\/月](\d+)/);
+  if (!match) return null;
+  let year = parseInt(match[1]);
+  if (year < 1000) year += 1911;
+  const date = new Date(year, parseInt(match[2])-1, parseInt(match[3]));
+  const today = new Date(); today.setHours(0,0,0,0);
+  return Math.ceil((date - today) / 86400000);
+}
+
+function renderTracker() {
+  let data = trackerData;
+  if (currentFilter !== 'all') {
+    if (currentFilter === 'urgent') {
+      data = data.filter(r => {
+        const d = daysUntilDeadline(r.deadline);
+        return d !== null && d <= 3 && r.status !== 'done';
+      });
+    } else {
+      data = data.filter(r => r.status === currentFilter);
+    }
+  }
+
+  // 統計
+  document.getElementById('stat-total').textContent = trackerData.length;
+  document.getElementById('stat-pending').textContent = trackerData.filter(r => r.status === 'pending').length;
+  document.getElementById('stat-done').textContent = trackerData.filter(r => r.status === 'done').length;
+  document.getElementById('stat-urgent').textContent = trackerData.filter(r => {
+    const d = daysUntilDeadline(r.deadline); return d !== null && d <= 3 && r.status !== 'done';
+  }).length;
+
+  const tbody = document.getElementById('tracker-body');
+  const empty = document.getElementById('tracker-empty');
+
+  if (data.length === 0) {
+    tbody.innerHTML = '';
+    empty.style.display = 'block';
+    return;
+  }
+  empty.style.display = 'none';
+
+  tbody.innerHTML = data.map(r => {
+    const days = daysUntilDeadline(r.deadline);
+    let deadlineHtml = '';
+    if (days === null) {
+      deadlineHtml = `<span class="deadline-none">${r.deadline || '無'}</span>`;
+    } else if (days < 0) {
+      deadlineHtml = `<span class="deadline-near">⚠️ 已逾期 ${Math.abs(days)} 天</span>`;
+    } else if (days <= 3) {
+      deadlineHtml = `<span class="deadline-near">⚠️ ${r.deadline}（剩 ${days} 天）</span>`;
+    } else {
+      deadlineHtml = `<span class="deadline-ok">${r.deadline}（剩 ${days} 天）</span>`;
+    }
+
+    return `<tr>
+      <td>${r.date}</td>
+      <td>${r.org}</td>
+      <td style="max-width:200px;word-break:break-all;">${r.subject}</td>
+      <td><span class="badge ${typeBadge[r.type]}">${typeLabel[r.type]}</span></td>
+      <td>${deadlineHtml}</td>
+      <td>
+        <select onchange="updateStatus(${r.id}, this.value)">
+          <option value="pending" ${r.status==='pending'?'selected':''}>待辦</option>
+          <option value="progress" ${r.status==='progress'?'selected':''}>處理中</option>
+          <option value="done" ${r.status==='done'?'selected':''}>已結案</option>
+        </select>
+      </td>
+      <td>
+        <button class="btn btn-outline btn-sm" onclick="viewRecord(${r.id})" style="margin-right:4px;">查看</button>
+        <button class="btn btn-danger btn-sm" onclick="deleteRecord(${r.id})">刪除</button>
+      </td>
+    </tr>`;
+  }).join('');
+}
+
+function filterTracker(filter, btn) {
+  currentFilter = filter;
+  document.querySelectorAll('.filter-btn').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+  renderTracker();
+}
+
+async function updateStatus(id, status) {
+  const r = trackerData.find(r => r.id == id);
+  if (r) {
+    r.status = status;
+    localStorage.setItem('trackerData', JSON.stringify(trackerData));
+    renderTracker();
+    await updateStatusInSheets(id, status);
+  }
+}
+
+async function deleteRecord(id) {
+  if (!confirm('確定刪除這筆紀錄？')) return;
+  trackerData = trackerData.filter(r => r.id != id);
+  localStorage.setItem('trackerData', JSON.stringify(trackerData));
+  renderTracker();
+  await deleteFromSheets(id);
+}
+
+function viewRecord(id) {
+  const r = trackerData.find(r => r.id == id);
+  if (r) alert(r.content || '（無內容）');
+}
+
+async function clearAllRecords() {
+  if (!confirm('確定清除所有公文紀錄？此動作無法復原。')) return;
+  trackerData = [];
+  localStorage.setItem('trackerData', JSON.stringify(trackerData));
+  renderTracker();
+  await clearAllFromSheets();
+}
+
+// ════════════════════════════════
+//  手動新增 Modal
+// ════════════════════════════════
+function openAddModal() {
+  document.getElementById('modal-overlay').style.display = 'flex';
+}
+function closeModal() {
+  document.getElementById('modal-overlay').style.display = 'none';
+}
+async function addManualRecord() {
+  const subject = document.getElementById('m-subject').value.trim();
+  if (!subject) { alert('請填寫主旨摘要'); return; }
+  const record = {
+    id: Date.now(),
+    date: document.getElementById('m-date').value || '—',
+    org: document.getElementById('m-org').value || '（未填）',
+    subject,
+    type: document.getElementById('m-type').value,
+    deadline: document.getElementById('m-deadline').value || '無',
+    status: 'pending',
+    content: ''
+  };
+  trackerData.unshift(record);
+  localStorage.setItem('trackerData', JSON.stringify(trackerData));
+  closeModal();
+  renderTracker();
+  switchTab('tracker');
+  await addToSheets(record);
+}
+</script>
+</body>
+</html>
