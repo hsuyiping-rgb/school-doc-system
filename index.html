@@ -689,7 +689,9 @@ window.onload = function() {
   document.getElementById('school-name').value = localStorage.getItem('schoolName') || '';
   document.getElementById('officer-name').value = localStorage.getItem('officerName') || '';
   document.getElementById('officer-title').value = localStorage.getItem('officerTitle') || '';
-  document.getElementById('sheets-url').value = localStorage.getItem('sheetsUrl') || '';
+  const DEFAULT_SHEETS_URL = 'https://script.google.com/macros/s/AKfycbyrpYp6JQA6DemgewPIW4ckm4uSKXjrQV3lxcypQi8FFPH2d1Fe5e7hI_n-eWIQmcB7/exec';
+  if (!localStorage.getItem('sheetsUrl')) localStorage.setItem('sheetsUrl', DEFAULT_SHEETS_URL);
+  document.getElementById('sheets-url').value = localStorage.getItem('sheetsUrl') || DEFAULT_SHEETS_URL;
 
   // 今天日期預設
   const today = new Date();
