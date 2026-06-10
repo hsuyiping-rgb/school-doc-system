@@ -1169,8 +1169,8 @@ async function syncFromSheets() {
 }
 
 async function addToSheets(record) {
-  if (!getSheetsUrl()) return;
-  await sheetsRequest({
+  if (!getSheetsUrl()) return { status: 'no-url' };
+  const res = await sheetsRequest({
     action: 'add',
     id: record.id,
     date: record.date,
@@ -1181,6 +1181,7 @@ async function addToSheets(record) {
     status: record.status,
     content: encodeURIComponent((record.content || '').substring(0, 800))
   });
+  return res || { status: 'error' };
 }
 
 async function updateStatusInSheets(id, status) {
@@ -1218,8 +1219,12 @@ async function saveToTracker() {
   renderTracker();
   // 同步到 Sheets
   if (getSheetsUrl()) {
-    await addToSheets(record);
-    alert('✅ 已存入追蹤，並同步到 Google Sheets！');
+    const res = await addToSheets(record);
+    if (res && res.status === 'ok') {
+      alert('✅ 已存入追蹤，並同步到 Google Sheets！');
+    } else {
+      alert('⚠️ 已存入本機追蹤，但同步到 Google Sheets 失敗！\n錯誤訊息：' + JSON.stringify(res) + '\n請到「設定」頁按「上傳本機資料到 Sheets」重試。');
+    }
   } else {
     alert('✅ 已存入本機追蹤！（尚未設定 Google Sheets）');
   }
