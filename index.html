@@ -549,6 +549,10 @@
         <div style="position:relative;margin-top:10px;">
           <textarea id="apps-script-code" readonly rows="12" style="font-size:.75rem;font-family:monospace;background:#fff;color:#333;resize:none;width:100%;border:1px solid #ddd;border-radius:6px;padding:10px;">const SHEET_NAME = '公文追蹤';
 
+function doPost(e) {
+  return doGet(e);
+}
+
 function doGet(e) {
   const action = e.parameter.action || 'getAll';
   const ss = SpreadsheetApp.getActiveSpreadsheet();
@@ -572,7 +576,7 @@ function doGet(e) {
 
   if (action === 'add') {
     const r = e.parameter;
-    sheet.appendRow([r.id, r.date, r.org, r.subject, r.type, r.deadline, r.status || 'pending', decodeURIComponent(r.content || '')]);
+    sheet.appendRow([r.id, r.date, r.org, r.subject, r.type, r.deadline, r.status || 'pending', r.content || '']);
     return ok('added');
   }
 
@@ -1115,6 +1119,22 @@ async function sheetsRequest(params) {
   }
 }
 
+// 內容較長（如公文全文）改用 POST，避免 GET 網址過長被拒
+async function sheetsRequestPost(params) {
+  const url = getSheetsUrl();
+  if (!url) return null;
+  try {
+    const res = await fetch(url, {
+      method: 'POST',
+      body: new URLSearchParams(params)
+    });
+    return await res.json();
+  } catch(e) {
+    console.error('Sheets 連線失敗', e);
+    return null;
+  }
+}
+
 async function testSheetsConnection() {
   const url = getSheetsUrl();
   if (!url) { alert('請先填入並儲存 Apps Script 網址'); return; }
@@ -1134,10 +1154,10 @@ async function uploadToSheets() {
   showSheetsStatus('⏳ 上傳中...', '#888');
   let ok = 0, fail = 0;
   for (const r of trackerData) {
-    const res = await sheetsRequest({
+    const res = await sheetsRequestPost({
       action: 'add', id: r.id, date: r.date, org: r.org,
       subject: r.subject, type: r.type, deadline: r.deadline,
-      status: r.status, content: encodeURIComponent((r.content||'').substring(0,800))
+      status: r.status, content: (r.content||'').substring(0,800)
     });
     res?.status === 'ok' ? ok++ : fail++;
     await new Promise(r => setTimeout(r, 400));
@@ -1170,7 +1190,7 @@ async function syncFromSheets() {
 
 async function addToSheets(record) {
   if (!getSheetsUrl()) return { status: 'no-url' };
-  const res = await sheetsRequest({
+  const res = await sheetsRequestPost({
     action: 'add',
     id: record.id,
     date: record.date,
@@ -1179,7 +1199,7 @@ async function addToSheets(record) {
     type: record.type,
     deadline: record.deadline,
     status: record.status,
-    content: encodeURIComponent((record.content || '').substring(0, 800))
+    content: (record.content || '').substring(0, 800)
   });
   return res || { status: 'error' };
 }
@@ -1202,17 +1222,33 @@ async function clearAllFromSheets() {
 // ════════════════════════════════
 //  存入追蹤
 // ════════════════════════════════
+// 從產稿全文擷取「要完成的工作」段落（簽→擬辦、函→辦法、擬辦→建議處理方式）
+function extractTasks(type, fullText) {
+  if (!fullText) return '';
+  let m = null;
+  if (type === 'sign') {
+    m = fullText.match(/擬\s*辦：([\s\S]*?)(?=承辦人：|$)/);
+  } else if (type === 'letter') {
+    m = fullText.match(/辦\s*法：([\s\S]*?)(?=正\s*本：|$)/);
+  } else {
+    m = fullText.match(/【建議處理方式】([\s\S]*?)(?=【|$)/);
+  }
+  return m ? m[1].trim() : '';
+}
+
 async function saveToTracker() {
   if (!lastGeneratedDoc) return;
+  const deadline = lastGeneratedDoc.deadline || '無';
+  const tasks = extractTasks(lastGeneratedDoc.type, lastGeneratedDoc.content);
   const record = {
     id: Date.now(),
     date: lastGeneratedDoc.date,
     org: lastGeneratedDoc.org || '（未填）',
     subject: lastGeneratedDoc.subject || '（未填）',
     type: lastGeneratedDoc.type,
-    deadline: lastGeneratedDoc.deadline || '無',
+    deadline: deadline,
     status: 'pending',
-    content: lastGeneratedDoc.content
+    content: `辦理期限：${deadline}\n要完成的工作：\n${tasks || '（未擷取到，請參考原稿）'}`
   };
   trackerData.unshift(record);
   localStorage.setItem('trackerData', JSON.stringify(trackerData));
