@@ -1109,25 +1109,10 @@ function copyScript() {
 async function sheetsRequest(params) {
   const url = getSheetsUrl();
   if (!url) return null;
+  // 不手動 encodeURIComponent，交給 URLSearchParams 單次編碼，避免雙重編碼使網址爆長
   const qs = new URLSearchParams(params).toString();
   try {
     const res = await fetch(`${url}?${qs}`);
-    return await res.json();
-  } catch(e) {
-    console.error('Sheets 連線失敗', e);
-    return null;
-  }
-}
-
-// 內容較長（如公文全文）改用 POST，避免 GET 網址過長被拒
-async function sheetsRequestPost(params) {
-  const url = getSheetsUrl();
-  if (!url) return null;
-  try {
-    const res = await fetch(url, {
-      method: 'POST',
-      body: new URLSearchParams(params)
-    });
     return await res.json();
   } catch(e) {
     console.error('Sheets 連線失敗', e);
@@ -1154,7 +1139,7 @@ async function uploadToSheets() {
   showSheetsStatus('⏳ 上傳中...', '#888');
   let ok = 0, fail = 0;
   for (const r of trackerData) {
-    const res = await sheetsRequestPost({
+    const res = await sheetsRequest({
       action: 'add', id: r.id, date: r.date, org: r.org,
       subject: r.subject, type: r.type, deadline: r.deadline,
       status: r.status, content: (r.content||'').substring(0,800)
@@ -1190,7 +1175,7 @@ async function syncFromSheets() {
 
 async function addToSheets(record) {
   if (!getSheetsUrl()) return { status: 'no-url' };
-  const res = await sheetsRequestPost({
+  const res = await sheetsRequest({
     action: 'add',
     id: record.id,
     date: record.date,
