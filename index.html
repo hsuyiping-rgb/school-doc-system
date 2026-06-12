@@ -1142,7 +1142,7 @@ async function uploadToSheets() {
     const res = await sheetsRequest({
       action: 'add', id: r.id, date: r.date, org: r.org,
       subject: r.subject, type: r.type, deadline: r.deadline,
-      status: r.status, content: (r.content||'').substring(0,800)
+      status: r.status, content: (r.content||'').substring(0,400)
     });
     res?.status === 'ok' ? ok++ : fail++;
     await new Promise(r => setTimeout(r, 400));
@@ -1184,7 +1184,7 @@ async function addToSheets(record) {
     type: record.type,
     deadline: record.deadline,
     status: record.status,
-    content: (record.content || '').substring(0, 800)
+    content: (record.content || '').substring(0, 400)
   });
   return res || { status: 'error' };
 }
