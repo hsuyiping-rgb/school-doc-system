@@ -1135,19 +1135,33 @@ async function testSheetsConnection() {
 async function uploadToSheets() {
   if (!getSheetsUrl()) { alert('請先設定 Google Sheets 連線'); return; }
   if (!trackerData.length) { alert('本機沒有資料可上傳'); return; }
-  if (!confirm(`確定要把本機 ${trackerData.length} 筆資料上傳到 Sheets？`)) return;
+  if (!confirm(`確定要把本機 ${trackerData.length} 筆資料上傳到 Sheets？\n（雲端已存在的資料會自動略過，不會重複）`)) return;
+
+  // 先抓雲端現有資料的 id，避免重複上傳
+  showSheetsStatus('⏳ 檢查雲端現有資料...', '#888');
+  const existing = await sheetsRequest({ action: 'getAll' });
+  if (!existing || existing.status !== 'ok') {
+    showSheetsStatus('❌ 無法讀取雲端資料，請先按「測試連線」確認', '#c0392b');
+    return;
+  }
+  const existingIds = new Set(existing.data.map(r => String(r.id)));
+
   showSheetsStatus('⏳ 上傳中...', '#888');
-  let ok = 0, fail = 0;
+  let ok = 0, fail = 0, skip = 0;
   for (const r of trackerData) {
+    if (existingIds.has(String(r.id))) { skip++; continue; }
     const res = await sheetsRequest({
       action: 'add', id: r.id, date: r.date, org: r.org,
       subject: r.subject, type: r.type, deadline: r.deadline,
       status: r.status, content: (r.content||'').substring(0,400)
     });
-    res?.status === 'ok' ? ok++ : fail++;
+    if (res?.status === 'ok') { ok++; existingIds.add(String(r.id)); } else { fail++; }
     await new Promise(r => setTimeout(r, 400));
   }
-  showSheetsStatus(`✅ 上傳完成：${ok} 筆成功${fail ? '，'+fail+' 筆失敗' : ''}`, '#27ae60');
+  const parts = [`✅ 新增 ${ok} 筆`];
+  if (skip) parts.push(`略過 ${skip} 筆（已存在）`);
+  if (fail) parts.push(`失敗 ${fail} 筆`);
+  showSheetsStatus(parts.join('，'), fail ? '#c0392b' : '#27ae60');
 }
 
 async function syncFromSheets() {
