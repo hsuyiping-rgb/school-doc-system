@@ -1,0 +1,93 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 900 600" font-family="'Microsoft JhengHei','Noto Sans TC',sans-serif">
+  <rect width="900" height="600" fill="#f5f0eb"/>
+
+  <!-- Header -->
+  <rect width="900" height="56" fill="#4a3728"/>
+  <text x="24" y="35" fill="#fff" font-size="19" font-weight="700">📋 學校行政公文系統</text>
+  <rect x="600" y="14" width="80" height="28" rx="14" fill="none" stroke="rgba(255,255,255,.4)" stroke-width="2"/>
+  <text x="640" y="33" fill="#fff" font-size="13" text-anchor="middle">✍️ 撰稿</text>
+  <rect x="688" y="14" width="80" height="28" rx="14" fill="#fff"/>
+  <text x="728" y="33" fill="#4a3728" font-size="13" font-weight="700" text-anchor="middle">📊 追蹤</text>
+  <rect x="776" y="14" width="80" height="28" rx="14" fill="none" stroke="rgba(255,255,255,.4)" stroke-width="2"/>
+  <text x="816" y="33" fill="#fff" font-size="13" text-anchor="middle">⚙️ 設定</text>
+
+  <!-- Stat cards -->
+  <g>
+    <rect x="40" y="80" width="195" height="80" rx="12" fill="#fff"/>
+    <text x="137" y="124" fill="#4a3728" font-size="30" font-weight="700" text-anchor="middle">12</text>
+    <text x="137" y="146" fill="#888" font-size="12" text-anchor="middle">全部公文</text>
+
+    <rect x="248" y="80" width="195" height="80" rx="12" fill="#fff"/>
+    <text x="345" y="124" fill="#856404" font-size="30" font-weight="700" text-anchor="middle">5</text>
+    <text x="345" y="146" fill="#888" font-size="12" text-anchor="middle">待辦</text>
+
+    <rect x="456" y="80" width="195" height="80" rx="12" fill="#fff"/>
+    <text x="553" y="124" fill="#c0392b" font-size="30" font-weight="700" text-anchor="middle">2</text>
+    <text x="553" y="146" fill="#888" font-size="12" text-anchor="middle">緊急（3天內）</text>
+
+    <rect x="664" y="80" width="196" height="80" rx="12" fill="#fff"/>
+    <text x="762" y="124" fill="#27ae60" font-size="30" font-weight="700" text-anchor="middle">7</text>
+    <text x="762" y="146" fill="#888" font-size="12" text-anchor="middle">已結案</text>
+  </g>
+
+  <!-- Filter row -->
+  <rect x="40" y="178" width="56" height="30" rx="15" fill="#4a3728"/>
+  <text x="68" y="198" fill="#fff" font-size="12" text-anchor="middle">全部</text>
+  <rect x="104" y="178" width="56" height="30" rx="15" fill="#faf8f5" stroke="#d5c9be" stroke-width="1.5"/>
+  <text x="132" y="198" fill="#666" font-size="12" text-anchor="middle">待辦</text>
+  <rect x="168" y="178" width="68" height="30" rx="15" fill="#faf8f5" stroke="#d5c9be" stroke-width="1.5"/>
+  <text x="202" y="198" fill="#666" font-size="12" text-anchor="middle">處理中</text>
+  <rect x="244" y="178" width="68" height="30" rx="15" fill="#faf8f5" stroke="#d5c9be" stroke-width="1.5"/>
+  <text x="278" y="198" fill="#666" font-size="12" text-anchor="middle">已結案</text>
+  <rect x="730" y="178" width="130" height="30" rx="8" fill="#4a3728"/>
+  <text x="795" y="198" fill="#fff" font-size="12" font-weight="700" text-anchor="middle">＋ 手動新增</text>
+
+  <!-- Table -->
+  <rect x="40" y="222" width="820" height="350" rx="14" fill="#fff"/>
+  <!-- table header -->
+  <rect x="40" y="222" width="820" height="40" fill="#f0ebe5"/>
+  <text x="64" y="247" fill="#4a3728" font-size="12" font-weight="700">收文日期</text>
+  <text x="170" y="247" fill="#4a3728" font-size="12" font-weight="700">來文機關</text>
+  <text x="330" y="247" fill="#4a3728" font-size="12" font-weight="700">主旨摘要</text>
+  <text x="560" y="247" fill="#4a3728" font-size="12" font-weight="700">類型</text>
+  <text x="630" y="247" fill="#4a3728" font-size="12" font-weight="700">辦理期限</text>
+  <text x="780" y="247" fill="#4a3728" font-size="12" font-weight="700">狀態</text>
+
+  <!-- row 1 -->
+  <g>
+    <text x="64" y="296" fill="#333" font-size="12">115/06/10</text>
+    <text x="170" y="296" fill="#333" font-size="12">新北市政府教育局</text>
+    <text x="330" y="296" fill="#333" font-size="12">檢送資深優良教師核定名冊…</text>
+    <rect x="560" y="283" width="42" height="22" rx="11" fill="#fde8d8"/>
+    <text x="581" y="298" fill="#7a3a0a" font-size="11" text-anchor="middle">擬辦</text>
+    <text x="630" y="296" fill="#27ae60" font-size="12">115年9月28日（剩96天）</text>
+    <rect x="780" y="283" width="58" height="22" rx="6" fill="#faf8f5" stroke="#d5c9be"/>
+    <text x="809" y="298" fill="#666" font-size="11" text-anchor="middle">待辦 ▾</text>
+  </g>
+  <line x1="56" y1="320" x2="844" y2="320" stroke="#ede8e3"/>
+
+  <!-- row 2 -->
+  <g>
+    <text x="64" y="356" fill="#333" font-size="12">115/06/09</text>
+    <text x="170" y="356" fill="#333" font-size="12">新北市政府教育局</text>
+    <text x="330" y="356" fill="#333" font-size="12">公立幼兒園期末核結清冊…</text>
+    <rect x="560" y="343" width="42" height="22" rx="11" fill="#d1ecf1"/>
+    <text x="581" y="358" fill="#0c5460" font-size="11" text-anchor="middle">函</text>
+    <text x="630" y="356" fill="#c0392b" font-size="12">⚠️ 115年7月6日（剩2天）</text>
+    <rect x="780" y="343" width="58" height="22" rx="6" fill="#faf8f5" stroke="#d5c9be"/>
+    <text x="809" y="358" fill="#666" font-size="11" text-anchor="middle">處理中 ▾</text>
+  </g>
+  <line x1="56" y1="380" x2="844" y2="380" stroke="#ede8e3"/>
+
+  <!-- row 3 -->
+  <g>
+    <text x="64" y="416" fill="#333" font-size="12">115/06/05</text>
+    <text x="170" y="416" fill="#333" font-size="12">新北市家庭教育中心</text>
+    <text x="330" y="416" fill="#333" font-size="12">親子共學母語實施計畫經費…</text>
+    <rect x="560" y="403" width="42" height="22" rx="11" fill="#e8dff5"/>
+    <text x="581" y="418" fill="#5a2d8a" font-size="11" text-anchor="middle">簽</text>
+    <text x="630" y="416" fill="#27ae60" font-size="12">115年12月11日（剩170天）</text>
+    <rect x="780" y="403" width="58" height="22" rx="6" fill="#d4edda" stroke="#bfe3c8"/>
+    <text x="809" y="418" fill="#155724" font-size="11" text-anchor="middle">已結案 ▾</text>
+  </g>
+</svg>

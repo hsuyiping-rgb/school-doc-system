@@ -8,6 +8,18 @@
 
 ---
 
+## 🖼️ 畫面預覽
+
+> 以下為介面預覽圖（依系統實際配色與版面繪製）
+
+### 撰稿頁
+![撰稿頁預覽](docs/screenshots/compose.svg)
+
+### 追蹤頁
+![追蹤頁預覽](docs/screenshots/tracker.svg)
+
+---
+
 ## ✨ 主要功能
 
 | 功能 | 說明 |

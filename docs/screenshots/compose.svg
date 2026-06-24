@@ -1,0 +1,42 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 900 600" font-family="'Microsoft JhengHei','Noto Sans TC',sans-serif">
+  <rect width="900" height="600" fill="#f5f0eb"/>
+
+  <!-- Header -->
+  <rect width="900" height="56" fill="#4a3728"/>
+  <text x="24" y="35" fill="#fff" font-size="19" font-weight="700">📋 學校行政公文系統</text>
+  <!-- tabs -->
+  <rect x="600" y="14" width="80" height="28" rx="14" fill="#fff"/>
+  <text x="640" y="33" fill="#4a3728" font-size="13" font-weight="700" text-anchor="middle">✍️ 撰稿</text>
+  <rect x="688" y="14" width="80" height="28" rx="14" fill="none" stroke="rgba(255,255,255,.4)" stroke-width="2"/>
+  <text x="728" y="33" fill="#fff" font-size="13" text-anchor="middle">📊 追蹤</text>
+  <rect x="776" y="14" width="80" height="28" rx="14" fill="none" stroke="rgba(255,255,255,.4)" stroke-width="2"/>
+  <text x="816" y="33" fill="#fff" font-size="13" text-anchor="middle">⚙️ 設定</text>
+
+  <!-- Card 1: 選擇公文類型 -->
+  <rect x="40" y="84" width="820" height="150" rx="14" fill="#fff"/>
+  <text x="64" y="118" fill="#4a3728" font-size="15" font-weight="700">📝 選擇公文類型</text>
+  <!-- type buttons -->
+  <rect x="64" y="134" width="250" height="44" rx="10" fill="#4a3728"/>
+  <text x="189" y="161" fill="#fff" font-size="15" text-anchor="middle">☑️ 簽</text>
+  <rect x="326" y="134" width="250" height="44" rx="10" fill="#faf8f5" stroke="#d5c9be" stroke-width="2"/>
+  <text x="451" y="161" fill="#666" font-size="15" text-anchor="middle">📨 函／稿</text>
+  <rect x="588" y="134" width="248" height="44" rx="10" fill="#faf8f5" stroke="#d5c9be" stroke-width="2"/>
+  <text x="712" y="161" fill="#666" font-size="15" text-anchor="middle">📋 擬辦</text>
+  <text x="64" y="208" fill="#888" font-size="12">【簽請繁核】內部公文，向長官請示。含主旨、說明、擬辦。</text>
+
+  <!-- Card 2: 公文主旨 -->
+  <rect x="40" y="250" width="820" height="230" rx="14" fill="#fff"/>
+  <text x="64" y="284" fill="#4a3728" font-size="15" font-weight="700">📥 公文主旨</text>
+  <text x="64" y="312" fill="#666" font-size="12">公文目的與用意（主旨）</text>
+  <rect x="64" y="320" width="772" height="38" rx="8" fill="#faf8f5" stroke="#d5c9be" stroke-width="1.5"/>
+  <text x="78" y="344" fill="#b3a89e" font-size="13">例：擬請學校派員參加教育局AI研習</text>
+  <text x="64" y="382" fill="#666" font-size="12">說明內容 / 辦理依據 <tspan fill="#c0392b">*</tspan></text>
+  <rect x="64" y="390" width="772" height="74" rx="8" fill="#faf8f5" stroke="#d5c9be" stroke-width="1.5"/>
+  <text x="78" y="414" fill="#b3a89e" font-size="13">貼上來文內容，AI 會協助分析重點…</text>
+
+  <!-- Generate button -->
+  <rect x="320" y="510" width="180" height="48" rx="8" fill="#4a3728"/>
+  <text x="410" y="540" fill="#fff" font-size="15" font-weight="700" text-anchor="middle">✨ AI 強化撰稿</text>
+  <rect x="516" y="510" width="100" height="48" rx="8" fill="#fff" stroke="#4a3728" stroke-width="2"/>
+  <text x="566" y="540" fill="#4a3728" font-size="15" font-weight="700" text-anchor="middle">🔄 重設</text>
+</svg>
