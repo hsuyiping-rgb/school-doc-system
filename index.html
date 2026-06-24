@@ -562,13 +562,28 @@ function doGet(e) {
     sheet.appendRow(['id','date','org','subject','type','deadline','status','content']);
   }
 
+  if (action === 'version') return ok('v2-textformat');
+
   if (action === 'getAll') {
     const data = sheet.getDataRange().getValues();
     if (data.length <= 1) return ok([]);
     const headers = data[0];
+    const tz = ss.getSpreadsheetTimeZone();
+    // 把被 Sheets 自動轉成日期的儲存格還原成民國 Y/M/D 字串
+    function toRoc(v) {
+      if (Object.prototype.toString.call(v) === '[object Date]') {
+        const y = Number(Utilities.formatDate(v, tz, 'yyyy'));
+        const rocY = y < 1000 ? y : y - 1911;
+        return rocY + '/' + Utilities.formatDate(v, tz, 'MM/dd');
+      }
+      return v;
+    }
     const records = data.slice(1).map(row => {
       const o = {};
       headers.forEach((h, i) => o[h] = row[i]);
+      o.id = String(o.id);
+      o.date = toRoc(o.date);
+      o.deadline = toRoc(o.deadline);
       return o;
     });
     return ok(records);
