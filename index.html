@@ -688,16 +688,21 @@ function gsIsWorkingDay(d, tz) {
   return GS_HOLIDAYS.indexOf(Utilities.formatDate(d, tz, 'yyyy-MM-dd')) === -1;
 }
 
-function gsDaysUntil(deadline, today) {
-  if (!deadline) return null;
-  const s = String(deadline);
-  if (s.indexOf('無') !== -1) return null;
-  const m = s.match(/(\d+)[\/年](\d+)[\/月](\d+)/);
-  if (!m) return null;
-  let y = parseInt(m[1], 10);
+function gsDaysUntil(deadline, today, tz) {
+  if (deadline === '' || deadline == null) return null;
+  let y, mo, d;
+  if (Object.prototype.toString.call(deadline) === '[object Date]') {
+    const p = Utilities.formatDate(deadline, tz, 'yyyy-MM-dd').split('-');
+    y = parseInt(p[0], 10); mo = parseInt(p[1], 10); d = parseInt(p[2], 10);
+  } else {
+    const s = String(deadline);
+    if (s.indexOf('無') !== -1) return null;
+    const m = s.match(/(\d+)[\/年](\d+)[\/月](\d+)/);
+    if (!m) return null;
+    y = parseInt(m[1], 10); mo = parseInt(m[2], 10); d = parseInt(m[3], 10);
+  }
   if (y < 1000) y += 1911;
-  const dl = new Date(y, parseInt(m[2], 10) - 1, parseInt(m[3], 10));
-  dl.setHours(0, 0, 0, 0);
+  const dl = new Date(y, mo - 1, d); dl.setHours(0, 0, 0, 0);
   return Math.ceil((dl - today) / 86400000);
 }
 
@@ -719,7 +724,7 @@ function sendDailyReminder() {
   for (let i = 1; i < data.length; i++) {
     const row = data[i];
     if (row[h.status] === 'done') continue;
-    const days = gsDaysUntil(row[h.deadline], today);
+    const days = gsDaysUntil(row[h.deadline], today, tz);
     if (days === null) continue;
     const it = { subject: row[h.subject], org: row[h.org], deadline: row[h.deadline], type: row[h.type], days: days };
     if (days < 0) b.overdue.push(it);
