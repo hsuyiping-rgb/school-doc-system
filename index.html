@@ -584,6 +584,7 @@
           <li>執行身分：「我」，存取權：「任何人」→ 點「部署」</li>
           <li>複製產生的網址，貼到上方欄位</li>
         </ol>
+        <p style="font-size:.82rem;color:#4a3728;margin-top:10px;line-height:1.8;">📧 <b>每日 Email 提醒（選用）</b>：貼好上方程式碼後，在 Apps Script 上方函式選單選「<b>setupDailyTrigger</b>」按▶執行一次（會要求授權），即可在每個上班日早上自動寄出今日待辦信。主管想收信可在程式碼 <code>REMINDER_EMAILS</code> 填入信箱（多人用逗號分隔）。</p>
         <div style="position:relative;margin-top:10px;">
           <textarea id="apps-script-code" readonly rows="12" style="font-size:.75rem;font-family:monospace;background:#fff;color:#333;resize:none;width:100%;border:1px solid #ddd;border-radius:6px;padding:10px;">const SHEET_NAME = '公文追蹤';
 
@@ -671,6 +672,90 @@ function ok(data) {
   return ContentService
     .createTextOutput(JSON.stringify({ status: 'ok', data: data }))
     .setMimeType(ContentService.MimeType.JSON);
+}
+
+// ===== 每日待辦 Email 提醒（階段三）=====
+// 收件者（多人用逗號分隔）。留空＝寄給試算表擁有者本人。主管可加自己的信箱。
+const REMINDER_EMAILS = '';
+// 提醒範圍：列出幾天內到期（含逾期）。預設 7 天。
+const REMINDER_DAYS_AHEAD = 7;
+// 台灣國定假日（與系統前端一致，⚠️ 請逐年核對）
+const GS_HOLIDAYS = ['2026-01-01','2026-02-16','2026-02-17','2026-02-18','2026-02-19','2026-02-20','2026-02-27','2026-02-28','2026-04-03','2026-04-04','2026-04-06','2026-05-01','2026-06-19','2026-09-25','2026-10-09','2026-10-10'];
+
+function gsIsWorkingDay(d, tz) {
+  const day = d.getDay();
+  if (day === 0 || day === 6) return false;
+  return GS_HOLIDAYS.indexOf(Utilities.formatDate(d, tz, 'yyyy-MM-dd')) === -1;
+}
+
+function gsDaysUntil(deadline, today) {
+  if (!deadline) return null;
+  const s = String(deadline);
+  if (s.indexOf('無') !== -1) return null;
+  const m = s.match(/(\d+)[\/年](\d+)[\/月](\d+)/);
+  if (!m) return null;
+  let y = parseInt(m[1], 10);
+  if (y < 1000) y += 1911;
+  const dl = new Date(y, parseInt(m[2], 10) - 1, parseInt(m[3], 10));
+  dl.setHours(0, 0, 0, 0);
+  return Math.ceil((dl - today) / 86400000);
+}
+
+// 主要寄信函式（由觸發器每日呼叫；非上班日或無待辦則不寄）
+function sendDailyReminder() {
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const tz = ss.getSpreadsheetTimeZone();
+  const now = new Date();
+  if (!gsIsWorkingDay(now, tz)) return;
+  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  const sheet = ss.getSheetByName(SHEET_NAME);
+  if (!sheet) return;
+  const data = sheet.getDataRange().getValues();
+  if (data.length <= 1) return;
+  const h = {};
+  data[0].forEach((name, i) => h[name] = i);
+
+  const b = { overdue: [], today: [], soon: [], week: [] };
+  for (let i = 1; i < data.length; i++) {
+    const row = data[i];
+    if (row[h.status] === 'done') continue;
+    const days = gsDaysUntil(row[h.deadline], today);
+    if (days === null) continue;
+    const it = { subject: row[h.subject], org: row[h.org], deadline: row[h.deadline], type: row[h.type], days: days };
+    if (days < 0) b.overdue.push(it);
+    else if (days === 0) b.today.push(it);
+    else if (days <= 3) b.soon.push(it);
+    else if (days <= REMINDER_DAYS_AHEAD) b.week.push(it);
+  }
+  const total = b.overdue.length + b.today.length + b.soon.length + b.week.length;
+  if (total === 0) return;
+
+  const TL = { sign: '簽', letter: '函', draft: '擬辦' };
+  function line(it) {
+    const d = it.days < 0 ? ('逾期' + Math.abs(it.days) + '天') : it.days === 0 ? '今天到期' : ('剩' + it.days + '天');
+    return '・[' + (TL[it.type] || it.type) + '] ' + it.subject + '（' + it.org + '）— ' + it.deadline + '（' + d + '）';
+  }
+  function sec(title, arr) { return arr.length ? (title + '（' + arr.length + '）\n' + arr.map(line).join('\n') + '\n\n') : ''; }
+
+  const rocDate = (now.getFullYear() - 1911) + '年' + (now.getMonth() + 1) + '月' + now.getDate() + '日';
+  const subject = '【公文提醒】' + rocDate + '　今日待辦 ' + total + ' 件（逾期' + b.overdue.length + '、今日到期' + b.today.length + '）';
+  let body = rocDate + ' 公文待辦提醒\n\n';
+  body += sec('[逾期]', b.overdue);
+  body += sec('[今日到期]', b.today);
+  body += sec('[3天內到期]', b.soon);
+  body += sec('[7天內到期]', b.week);
+  body += '———\n本信由「學校行政公文系統」自動發送。';
+
+  const to = REMINDER_EMAILS.trim() || Session.getEffectiveUser().getEmail();
+  GmailApp.sendEmail(to, subject, body);
+}
+
+// 只需手動執行一次：建立「每天早上 7~8 點」的觸發器（非上班日由函式內部跳過）
+function setupDailyTrigger() {
+  ScriptApp.getProjectTriggers().forEach(t => {
+    if (t.getHandlerFunction() === 'sendDailyReminder') ScriptApp.deleteTrigger(t);
+  });
+  ScriptApp.newTrigger('sendDailyReminder').timeBased().everyDays(1).atHour(7).create();
 }</textarea>
           <button class="btn btn-outline btn-sm" onclick="copyScript()" style="margin-top:6px;">📋 複製程式碼</button>
         </div>
