@@ -300,6 +300,20 @@
   }
   .draft-section p { font-size: .93rem; line-height: 1.8; color: #333; }
 
+  /* ── 今日待辦 ── */
+  .today-group { margin-bottom: 18px; }
+  .today-group h3 { font-size: .92rem; margin-bottom: 10px; display: flex; align-items: center; gap: 8px; color: #4a3728; }
+  .today-group .gcount { font-size: .75rem; font-weight: 700; color: #fff; border-radius: 10px; padding: 1px 9px; }
+  .today-item { display: flex; align-items: center; gap: 12px; background: #fff; border-radius: 10px; padding: 12px 16px; margin-bottom: 8px; box-shadow: 0 1px 4px rgba(0,0,0,.06); border-left: 4px solid #ccc; }
+  .today-item .ti-main { flex: 1; min-width: 0; }
+  .today-item .ti-subject { font-size: .92rem; color: #333; word-break: break-all; }
+  .today-item .ti-meta { font-size: .78rem; color: #888; margin-top: 4px; display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+  .today-item .ti-deadline { font-size: .82rem; font-weight: 700; white-space: nowrap; }
+  .ti-overdue { border-left-color: #c0392b; }
+  .ti-today { border-left-color: #e67e22; }
+  .ti-soon { border-left-color: #f1c40f; }
+  .ti-later { border-left-color: #27ae60; }
+
   @media (max-width: 600px) {
     .type-btns { flex-direction: column; }
     .parse-grid { grid-template-columns: 90px 1fr; }
@@ -313,16 +327,30 @@
 <header>
   <h1>📋 學校行政公文系統</h1>
   <nav class="tab-nav">
-    <button class="tab-btn active" onclick="switchTab('compose')">✍️ 撰稿</button>
-    <button class="tab-btn" onclick="switchTab('tracker')">📊 追蹤</button>
-    <button class="tab-btn" onclick="switchTab('settings')">⚙️ 設定</button>
+    <button class="tab-btn active" data-tab="today" onclick="switchTab('today')">📅 今日</button>
+    <button class="tab-btn" data-tab="compose" onclick="switchTab('compose')">✍️ 撰稿</button>
+    <button class="tab-btn" data-tab="tracker" onclick="switchTab('tracker')">📊 追蹤</button>
+    <button class="tab-btn" data-tab="settings" onclick="switchTab('settings')">⚙️ 設定</button>
   </nav>
 </header>
 
 <div class="container">
 
+  <!-- ══════════════ 今日頁 ══════════════ -->
+  <div id="page-today" class="page active">
+    <div class="card">
+      <h2>📅 今日待辦提醒</h2>
+      <p id="today-date-line" style="font-size:.9rem;color:#666;margin-top:4px;"></p>
+    </div>
+    <div id="today-groups"></div>
+    <div class="empty-state" id="today-empty" style="display:none;">
+      <div class="icon">✅</div>
+      <p>今日與近 7 天內沒有待辦公文<br>輕鬆一下吧！</p>
+    </div>
+  </div>
+
   <!-- ══════════════ 撰稿頁 ══════════════ -->
-  <div id="page-compose" class="page active">
+  <div id="page-compose" class="page">
 
     <!-- API Key 提示 -->
     <div class="api-banner" id="api-banner">
@@ -520,6 +548,16 @@
         <button class="btn btn-primary" onclick="saveSettings()">儲存設定</button>
       </div>
       <p id="settings-status" style="font-size:.85rem;color:#27ae60;margin-top:8px;display:none;">✅ 已儲存</p>
+    </div>
+
+    <div class="card">
+      <h2>📅 每日待辦提醒</h2>
+      <label style="display:flex;align-items:center;gap:8px;margin-top:4px;cursor:pointer;">
+        <input type="checkbox" id="reminder-toggle" onchange="toggleReminder(this)" style="width:auto;">
+        <span style="color:#555;">上班日開啟系統時自動跳出今日提醒</span>
+      </label>
+      <p style="font-size:.82rem;color:#888;margin:10px 0;">提醒只在「上班日」（排除週末與國定假日）、且有待辦公文、每天首次開啟時出現一次。</p>
+      <button class="btn btn-outline btn-sm" onclick="enableDesktopNotify()">🔔 啟用桌面通知</button>
     </div>
 
     <div class="card">
@@ -722,6 +760,12 @@ window.onload = function() {
 
   dedupeTracker(); // 開啟時自動清除既有重複
   renderTracker();
+
+  // 今日待辦
+  const rt = document.getElementById('reminder-toggle');
+  if (rt) rt.checked = localStorage.getItem('todayReminderOff') !== '1';
+  renderToday();
+  maybeShowTodayReminder();
 };
 
 // ════════════════════════════════
@@ -731,8 +775,119 @@ function switchTab(name) {
   document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
   document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
   document.getElementById('page-' + name).classList.add('active');
-  event.target.classList.add('active');
+  const btn = document.querySelector(`.tab-btn[data-tab="${name}"]`);
+  if (btn) btn.classList.add('active');
   if (name === 'tracker') renderTracker();
+  if (name === 'today') renderToday();
+}
+
+// ════════════════════════════════
+//  今日待辦提醒（階段一）
+// ════════════════════════════════
+// 台灣國定假日（西元 YYYY-MM-DD）。⚠️ 請每年核對更新，未列入的日子一律視為上班日。
+const HOLIDAYS = [
+  '2026-01-01',                                                   // 元旦
+  '2026-02-16','2026-02-17','2026-02-18','2026-02-19','2026-02-20', // 春節
+  '2026-02-27','2026-02-28',                                      // 和平紀念日
+  '2026-04-03','2026-04-04','2026-04-06',                          // 兒童節／清明
+  '2026-05-01',                                                   // 勞動節
+  '2026-06-19',                                                   // 端午節
+  '2026-09-25',                                                   // 中秋節
+  '2026-10-09','2026-10-10'                                       // 國慶日
+];
+
+function isWorkingDay(d) {
+  const day = d.getDay();
+  if (day === 0 || day === 6) return false; // 週末
+  const iso = d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0') + '-' + String(d.getDate()).padStart(2,'0');
+  return !HOLIDAYS.includes(iso);
+}
+
+// 把待辦依到期遠近分組（已結案、無期限者不列入）
+function todayBuckets() {
+  const overdue=[], today=[], soon=[], later=[];
+  trackerData.forEach(r => {
+    if (r.status === 'done') return;
+    const days = daysUntilDeadline(r.deadline);
+    if (days === null) return;
+    if (days < 0) overdue.push({r, days});
+    else if (days === 0) today.push({r, days});
+    else if (days <= 3) soon.push({r, days});
+    else if (days <= 7) later.push({r, days});
+  });
+  return {overdue, today, soon, later};
+}
+
+function deadlineText(deadline, days) {
+  if (days < 0) return `逾期 ${Math.abs(days)} 天`;
+  if (days === 0) return '今天到期';
+  return `${deadline}（剩 ${days} 天）`;
+}
+
+function renderToday() {
+  const now = new Date();
+  const roc = now.getFullYear() - 1911;
+  const wd = ['日','一','二','三','四','五','六'][now.getDay()];
+  const working = isWorkingDay(now);
+  document.getElementById('today-date-line').innerHTML =
+    `民國 ${roc} 年 ${now.getMonth()+1} 月 ${now.getDate()} 日（星期${wd}）`
+    + (working ? '　・上班日' : '　・<span style="color:#27ae60">非上班日</span>');
+
+  const b = todayBuckets();
+  const groups = [
+    {label:'🔴 已逾期',      color:'#c0392b', cls:'ti-overdue', items:b.overdue},
+    {label:'🟠 今日到期',    color:'#e67e22', cls:'ti-today',   items:b.today},
+    {label:'🟡 3 天內到期',  color:'#b8930a', cls:'ti-soon',    items:b.soon},
+    {label:'🟢 7 天內到期',  color:'#27ae60', cls:'ti-later',   items:b.later},
+  ];
+  const total = b.overdue.length + b.today.length + b.soon.length + b.later.length;
+  const wrap = document.getElementById('today-groups');
+  const empty = document.getElementById('today-empty');
+  if (total === 0) { wrap.innerHTML = ''; empty.style.display = 'block'; return; }
+  empty.style.display = 'none';
+  wrap.innerHTML = groups.filter(g => g.items.length).map(g => `
+    <div class="today-group">
+      <h3>${g.label}<span class="gcount" style="background:${g.color}">${g.items.length}</span></h3>
+      ${g.items.map(({r, days}) => `
+        <div class="today-item ${g.cls}">
+          <div class="ti-main">
+            <div class="ti-subject">${r.subject || '（未填）'}</div>
+            <div class="ti-meta">${r.org || ''} <span class="badge ${typeBadge[r.type]}">${typeLabel[r.type]}</span></div>
+          </div>
+          <div class="ti-deadline" style="color:${g.color}">${deadlineText(r.deadline, days)}</div>
+        </div>`).join('')}
+    </div>`).join('');
+}
+
+// 上班日首次開啟、且有待辦時，自動跳今日提醒（每天只提醒一次）
+function maybeShowTodayReminder() {
+  if (localStorage.getItem('todayReminderOff') === '1') return;
+  const now = new Date();
+  if (!isWorkingDay(now)) return;
+  const stamp = now.toDateString();
+  if (localStorage.getItem('lastReminded') === stamp) return;
+  const b = todayBuckets();
+  const total = b.overdue.length + b.today.length + b.soon.length + b.later.length;
+  if (total === 0) return;
+  localStorage.setItem('lastReminded', stamp);
+  // 桌面通知（若已授權）
+  if (window.Notification && Notification.permission === 'granted') {
+    new Notification('學校行政公文系統', { body: `今日待辦 ${total} 件（逾期 ${b.overdue.length}、今日到期 ${b.today.length}）` });
+  }
+  setTimeout(() => {
+    alert(`📅 今日提醒\n\n🔴 已逾期：${b.overdue.length} 件\n🟠 今日到期：${b.today.length} 件\n🟡 3 天內：${b.soon.length} 件\n🟢 7 天內：${b.later.length} 件`);
+  }, 400);
+}
+
+function enableDesktopNotify() {
+  if (!window.Notification) { alert('此瀏覽器不支援桌面通知'); return; }
+  Notification.requestPermission().then(p => {
+    alert(p === 'granted' ? '✅ 已啟用桌面通知，下次上班日開啟時會通知你' : '未授權桌面通知');
+  });
+}
+
+function toggleReminder(cb) {
+  localStorage.setItem('todayReminderOff', cb.checked ? '0' : '1');
 }
 
 // ════════════════════════════════
