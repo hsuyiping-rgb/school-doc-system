@@ -677,8 +677,8 @@ function ok(data) {
 // ===== 每日待辦 Email 提醒（階段三）=====
 // 收件者（多人用逗號分隔）。留空＝寄給試算表擁有者本人。主管可加自己的信箱。
 const REMINDER_EMAILS = '';
-// 提醒範圍：列出幾天內到期（含逾期）。預設 7 天。
-const REMINDER_DAYS_AHEAD = 7;
+// 提醒範圍：列出幾天內到期（含逾期）。預設 14 天。
+const REMINDER_DAYS_AHEAD = 14;
 // 台灣國定假日（與系統前端一致，⚠️ 請逐年核對）
 const GS_HOLIDAYS = ['2026-01-01','2026-02-16','2026-02-17','2026-02-18','2026-02-19','2026-02-20','2026-02-27','2026-02-28','2026-04-03','2026-04-04','2026-04-06','2026-05-01','2026-06-19','2026-09-25','2026-10-09','2026-10-10'];
 
@@ -743,7 +743,7 @@ function sendDailyReminder() {
   body += sec('[逾期]', b.overdue);
   body += sec('[今日到期]', b.today);
   body += sec('[3天內到期]', b.soon);
-  body += sec('[7天內到期]', b.week);
+  body += sec('[' + REMINDER_DAYS_AHEAD + '天內到期]', b.week);
   body += '———\n本信由「學校行政公文系統」自動發送。';
 
   const to = REMINDER_EMAILS.trim() || Session.getEffectiveUser().getEmail();
