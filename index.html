@@ -490,11 +490,12 @@
   <!-- ══════════════ 追蹤頁 ══════════════ -->
   <div id="page-tracker" class="page">
 
-    <!-- 檢視切換：承辦人 / 主管 -->
+    <!-- 檢視切換：依角色顯示 -->
     <div style="display:flex;gap:8px;align-items:center;margin-bottom:14px;">
       <span style="font-size:.85rem;color:#888;">檢視：</span>
       <button class="view-btn active" data-view="mine" onclick="switchView('mine', this)">👤 我的公文</button>
-      <button class="view-btn" data-view="all" onclick="switchView('all', this)">👥 全部（主管）</button>
+      <button class="view-btn" data-view="dept" onclick="switchView('dept', this)" style="display:none;">🏢 我的處室</button>
+      <button class="view-btn" data-view="all" onclick="switchView('all', this)" style="display:none;">🏫 全校</button>
     </div>
 
     <!-- 主管：各承辦人彙整 -->
@@ -563,10 +564,39 @@
       <input type="text" id="officer-name" placeholder="例：方○○">
       <label>職稱</label>
       <input type="text" id="officer-title" placeholder="例：資訊組長">
+      <label>角色</label>
+      <select id="my-role" style="width:100%;margin-top:2px;">
+        <option value="officer">承辦人（只看自己的公文）</option>
+        <option value="supervisor">處室主管（看本處室所有承辦人）</option>
+        <option value="principal">校長（看全校所有處室）</option>
+      </select>
+      <label>所屬處室</label>
+      <select id="my-dept" style="width:100%;margin-top:2px;">
+        <option value="">（請選擇）</option>
+        <option value="校長室">校長室</option>
+        <option value="教務處">教務處</option>
+        <option value="學務處">學務處</option>
+        <option value="總務處">總務處</option>
+        <option value="輔導室">輔導室</option>
+        <option value="附設幼兒園">附設幼兒園</option>
+        <option value="幼教研習中心">幼教研習中心</option>
+      </select>
       <div style="margin-top:14px;">
         <button class="btn btn-primary" onclick="saveSettings()">儲存設定</button>
       </div>
       <p id="settings-status" style="font-size:.85rem;color:#27ae60;margin-top:8px;display:none;">✅ 已儲存</p>
+    </div>
+
+    <div class="card">
+      <h2>📇 人員通訊錄 <span style="font-size:.8rem;color:#aaa;font-weight:400">（催辦 Email 用）</span></h2>
+      <p style="font-size:.82rem;color:#888;margin-bottom:10px;">登錄承辦人對應的處室與 Email，主管「催辦」時系統才能寄信給對的人。共用於雲端，全校一份。</p>
+      <div id="dir-rows"></div>
+      <div style="margin-top:10px;display:flex;gap:8px;flex-wrap:wrap;">
+        <button class="btn btn-outline btn-sm" onclick="addDirRow()">＋ 新增一列</button>
+        <button class="btn btn-primary btn-sm" onclick="saveDirectory()">💾 儲存通訊錄</button>
+        <button class="btn btn-outline btn-sm" onclick="loadDirectory()">⬇️ 重新載入</button>
+      </div>
+      <p id="dir-status" style="font-size:.85rem;margin-top:8px;display:none;"></p>
     </div>
 
     <div class="card">
@@ -606,6 +636,7 @@
         <p style="font-size:.82rem;color:#4a3728;margin-top:10px;line-height:1.8;">📧 <b>每日 Email 提醒（選用）</b>：貼好上方程式碼後，在 Apps Script 上方函式選單選「<b>setupDailyTrigger</b>」按▶執行一次（會要求授權），即可在每個上班日早上自動寄出今日待辦信。主管想收信可在程式碼 <code>REMINDER_EMAILS</code> 填入信箱（多人用逗號分隔）。</p>
         <div style="position:relative;margin-top:10px;">
           <textarea id="apps-script-code" readonly rows="12" style="font-size:.75rem;font-family:monospace;background:#fff;color:#333;resize:none;width:100%;border:1px solid #ddd;border-radius:6px;padding:10px;">const SHEET_NAME = '公文追蹤';
+const DIR_SHEET = '通訊錄';
 
 function doPost(e) {
   return doGet(e);
@@ -617,12 +648,13 @@ function doGet(e) {
   let sheet = ss.getSheetByName(SHEET_NAME);
   if (!sheet) {
     sheet = ss.insertSheet(SHEET_NAME);
-    sheet.appendRow(['id','date','org','subject','type','deadline','status','content','officer']);
+    sheet.appendRow(['id','date','org','subject','type','deadline','status','content','officer','dept']);
   }
-  // 自動補上 officer 欄（第 9 欄），相容舊試算表
+  // 自動補上 officer(第9欄)、dept(第10欄)，相容舊試算表
   if (sheet.getRange(1, 9).getValue() !== 'officer') sheet.getRange(1, 9).setValue('officer');
+  if (sheet.getRange(1, 10).getValue() !== 'dept') sheet.getRange(1, 10).setValue('dept');
 
-  if (action === 'version') return ok('v3-officer');
+  if (action === 'version') return ok('v4-dept');
 
   if (action === 'getAll') {
     const data = sheet.getDataRange().getValues();
@@ -653,8 +685,8 @@ function doGet(e) {
     const r = e.parameter;
     const row = sheet.getLastRow() + 1;
     // 先把整列設成純文字格式，避免 id/日期/期限被自動轉成數字或時間戳
-    sheet.getRange(row, 1, 1, 9).setNumberFormat('@');
-    sheet.getRange(row, 1, 1, 9).setValues([[r.id, r.date, r.org, r.subject, r.type, r.deadline, r.status || 'pending', r.content || '', r.officer || '']]);
+    sheet.getRange(row, 1, 1, 10).setNumberFormat('@');
+    sheet.getRange(row, 1, 1, 10).setValues([[r.id, r.date, r.org, r.subject, r.type, r.deadline, r.status || 'pending', r.content || '', r.officer || '', r.dept || '']]);
     return ok('added');
   }
 
@@ -684,6 +716,55 @@ function doGet(e) {
     const lastRow = sheet.getLastRow();
     if (lastRow > 1) sheet.deleteRows(2, lastRow - 1);
     return ok('cleared');
+  }
+
+  // ── 人員通訊錄 ──
+  if (action === 'getDirectory') {
+    const dir = ss.getSheetByName(DIR_SHEET);
+    if (!dir) return ok([]);
+    const dd = dir.getDataRange().getValues();
+    if (dd.length <= 1) return ok([]);
+    return ok(dd.slice(1).map(r => ({ name: r[0], dept: r[1], email: r[2] })));
+  }
+
+  if (action === 'saveDirectory') {
+    let dir = ss.getSheetByName(DIR_SHEET);
+    if (!dir) dir = ss.insertSheet(DIR_SHEET);
+    dir.clear();
+    dir.appendRow(['name', 'dept', 'email']);
+    const rows = JSON.parse(e.parameter.rows || '[]');
+    rows.forEach(r => dir.appendRow([r.name || '', r.dept || '', r.email || '']));
+    return ok('saved');
+  }
+
+  // ── 催辦：寄 Email 給該公文的承辦人 ──
+  if (action === 'nudge') {
+    const data = sheet.getDataRange().getValues();
+    const hh = {};
+    data[0].forEach((n, i) => hh[n] = i);
+    let rec = null;
+    for (let i = 1; i < data.length; i++) {
+      if (String(data[i][0]) === String(e.parameter.id)) { rec = data[i]; break; }
+    }
+    if (!rec) return ok('not-found');
+    const officer = String(rec[hh.officer] || '').trim();
+    const dir = ss.getSheetByName(DIR_SHEET);
+    let email = '';
+    if (dir) {
+      const dd = dir.getDataRange().getValues();
+      for (let i = 1; i < dd.length; i++) {
+        if (String(dd[i][0]).trim() === officer && officer !== '') { email = String(dd[i][2] || '').trim(); break; }
+      }
+    }
+    if (!email) return ok('no-email');
+    const note = e.parameter.note || '';
+    const subject = '【公文催辦】' + rec[hh.subject];
+    let body = officer + ' 您好：\n\n主管提醒您儘速處理下列公文：\n\n主旨：' + rec[hh.subject] +
+      '\n來文機關：' + rec[hh.org] + '\n辦理期限：' + rec[hh.deadline] +
+      (note ? '\n\n主管留言：' + note : '') +
+      '\n\n請儘速辦理，謝謝。\n———\n本信由「學校行政公文系統」自動發送。';
+    GmailApp.sendEmail(email, subject, body);
+    return ok('nudged');
   }
 
   return ok('unknown action');
@@ -807,6 +888,17 @@ function setupDailyTrigger() {
     <input type="text" id="m-org" placeholder="例：新北市教育局">
     <label>承辦人</label>
     <input type="text" id="m-officer" placeholder="預設為設定頁的承辦人">
+    <label>處室</label>
+    <select id="m-dept-sel" style="width:100%;margin-top:2px;">
+      <option value="">（預設為設定頁的處室）</option>
+      <option value="校長室">校長室</option>
+      <option value="教務處">教務處</option>
+      <option value="學務處">學務處</option>
+      <option value="總務處">總務處</option>
+      <option value="輔導室">輔導室</option>
+      <option value="附設幼兒園">附設幼兒園</option>
+      <option value="幼教研習中心">幼教研習中心</option>
+    </select>
     <label>主旨摘要<span class="req">*</span></label>
     <input type="text" id="m-subject" placeholder="">
     <label>公文類型</label>
@@ -863,6 +955,8 @@ window.onload = function() {
   document.getElementById('school-name').value = localStorage.getItem('schoolName') || '';
   document.getElementById('officer-name').value = localStorage.getItem('officerName') || '';
   document.getElementById('officer-title').value = localStorage.getItem('officerTitle') || '';
+  document.getElementById('my-role').value = localStorage.getItem('myRole') || 'officer';
+  document.getElementById('my-dept').value = localStorage.getItem('myDept') || '';
   const DEFAULT_SHEETS_URL = 'https://script.google.com/macros/s/AKfycbyyZhrjTMzPHoI72_VNP1oHddHsiEm_Y3wAfe-D93AumydmzBb0Ipu8hJvm3iW1E30a/exec';
   if (!localStorage.getItem('sheetsUrl')) localStorage.setItem('sheetsUrl', DEFAULT_SHEETS_URL);
   document.getElementById('sheets-url').value = localStorage.getItem('sheetsUrl') || DEFAULT_SHEETS_URL;
@@ -873,7 +967,9 @@ window.onload = function() {
   document.getElementById('m-date').value = `${roc}/${String(today.getMonth()+1).padStart(2,'0')}/${String(today.getDate()).padStart(2,'0')}`;
 
   dedupeTracker(); // 開啟時自動清除既有重複
+  applyRoleToViews(); // 依角色設定檢視按鈕與預設檢視
   renderTracker();
+  if (getSheetsUrl()) loadDirectory(); // 載入雲端通訊錄
 
   // 今日待辦
   const rt = document.getElementById('reminder-toggle');
@@ -1046,6 +1142,9 @@ function saveSettings() {
   localStorage.setItem('schoolName', document.getElementById('school-name').value);
   localStorage.setItem('officerName', document.getElementById('officer-name').value);
   localStorage.setItem('officerTitle', document.getElementById('officer-title').value);
+  localStorage.setItem('myRole', document.getElementById('my-role').value);
+  localStorage.setItem('myDept', document.getElementById('my-dept').value);
+  applyRoleToViews(); renderTracker(); // 角色/處室變更即時反映
   document.getElementById('settings-status').style.display = 'block';
   setTimeout(() => document.getElementById('settings-status').style.display = 'none', 2000);
 }
@@ -1441,7 +1540,7 @@ async function uploadToSheets() {
     const res = await sheetsRequest({
       action: 'add', id: r.id, date: r.date, org: r.org,
       subject: r.subject, type: r.type, deadline: r.deadline,
-      status: r.status, officer: r.officer || '', content: (r.content||'').substring(0,400)
+      status: r.status, officer: r.officer || '', dept: r.dept || '', content: (r.content||'').substring(0,400)
     });
     if (res?.status === 'ok') { ok++; existingIds.add(String(r.id)); } else { fail++; }
     await new Promise(r => setTimeout(r, 400));
@@ -1466,6 +1565,7 @@ async function syncFromSheets() {
       deadline: r.deadline || '無',
       status: r.status || 'pending',
       officer: r.officer || '',
+      dept: r.dept || '',
       content: r.content || ''
     }));
     localStorage.setItem('trackerData', JSON.stringify(trackerData));
@@ -1489,6 +1589,7 @@ async function addToSheets(record) {
     deadline: record.deadline,
     status: record.status,
     officer: record.officer || '',
+    dept: record.dept || '',
     content: (record.content || '').substring(0, 400)
   });
   return res || { status: 'error' };
@@ -1562,6 +1663,7 @@ async function saveToTracker() {
     deadline: deadline,
     status: 'pending',
     officer: (localStorage.getItem('officerName') || '').trim(),
+    dept: (localStorage.getItem('myDept') || '').trim(),
     content: `辦理期限：${deadline}\n要完成的工作：\n${tasks || '（未擷取到，請參考原稿）'}`
   };
   // 重複防治：已存在相同公文則擋下
@@ -1607,15 +1709,18 @@ function daysUntilDeadline(deadlineStr) {
 }
 
 function renderTracker() {
-  // 檢視過濾：承辦人本人只看自己的（含未指定承辦人的舊資料）；主管看全部
+  // 檢視過濾：我的公文 / 我的處室 / 全校
   const myOfficer = (localStorage.getItem('officerName') || '').trim();
+  const myDept = (localStorage.getItem('myDept') || '').trim();
   let viewData = trackerData;
   if (currentView === 'mine' && myOfficer) {
     viewData = trackerData.filter(r => {
       const o = (r.officer || '').trim();
       return o === myOfficer || o === '';
     });
-  }
+  } else if (currentView === 'dept' && myDept) {
+    viewData = trackerData.filter(r => (r.dept || '').trim() === myDept);
+  } // currentView === 'all' → 全部
 
   // 主管彙整面板
   renderSupervisorSummary();
@@ -1667,7 +1772,7 @@ function renderTracker() {
     return `<tr>
       <td>${r.date}</td>
       <td>${r.org}</td>
-      <td>${r.officer || '—'}</td>
+      <td>${r.officer || '—'}${r.dept ? `<br><span style="font-size:.75rem;color:#aaa;">${r.dept}</span>` : ''}</td>
       <td style="max-width:200px;word-break:break-all;">${r.subject}</td>
       <td><span class="badge ${typeBadge[r.type]}">${typeLabel[r.type]}</span></td>
       <td>${deadlineHtml}</td>
@@ -1679,6 +1784,7 @@ function renderTracker() {
         </select>
       </td>
       <td>
+        ${(currentView === 'dept' || currentView === 'all') ? `<button class="btn btn-sm" style="background:#e67e22;color:#fff;margin-right:4px;" onclick="nudgeOfficer(${r.id})">催辦</button>` : ''}
         <button class="btn btn-outline btn-sm" onclick="viewRecord(${r.id})" style="margin-right:4px;">查看</button>
         <button class="btn btn-danger btn-sm" onclick="deleteRecord(${r.id})">刪除</button>
       </td>
@@ -1700,27 +1806,104 @@ function switchView(v, btn) {
   renderTracker();
 }
 
-// 主管檢視：各承辦人待辦／逾期彙整
+// 依角色顯示檢視按鈕，並設定預設檢視
+function applyRoleToViews() {
+  const role = localStorage.getItem('myRole') || 'officer';
+  const deptBtn = document.querySelector('.view-btn[data-view="dept"]');
+  const allBtn = document.querySelector('.view-btn[data-view="all"]');
+  if (deptBtn) deptBtn.style.display = (role === 'supervisor' || role === 'principal') ? '' : 'none';
+  if (allBtn) allBtn.style.display = (role === 'principal') ? '' : 'none';
+  let def = 'mine';
+  if (role === 'supervisor') def = 'dept';
+  else if (role === 'principal') def = 'all';
+  currentView = def;
+  document.querySelectorAll('.view-btn').forEach(b => b.classList.toggle('active', b.dataset.view === def));
+}
+
+// 主管／校長彙整：全校→各處室；我的處室→各承辦人
 function renderSupervisorSummary() {
   const el = document.getElementById('supervisor-summary');
-  if (currentView !== 'all') { el.style.display = 'none'; return; }
+  let title = '', keyFn = null, source = trackerData;
+  if (currentView === 'all') {
+    title = '🏫 各處室待辦彙整';
+    keyFn = r => (r.dept || '').trim() || '（未指定處室）';
+  } else if (currentView === 'dept') {
+    const myDept = (localStorage.getItem('myDept') || '').trim();
+    title = `🏢 ${myDept || '本處室'}各承辦人待辦彙整`;
+    source = trackerData.filter(r => (r.dept || '').trim() === myDept);
+    keyFn = r => (r.officer || '').trim() || '（未指定）';
+  } else { el.style.display = 'none'; return; }
+
   const by = {};
-  trackerData.forEach(r => {
-    const o = (r.officer || '').trim() || '（未指定）';
-    if (!by[o]) by[o] = { pending: 0, overdue: 0, total: 0 };
-    by[o].total++;
+  source.forEach(r => {
+    const k = keyFn(r);
+    if (!by[k]) by[k] = { pending: 0, overdue: 0, total: 0 };
+    by[k].total++;
     if (r.status !== 'done') {
-      by[o].pending++;
+      by[k].pending++;
       const d = daysUntilDeadline(r.deadline);
-      if (d !== null && d < 0) by[o].overdue++;
+      if (d !== null && d < 0) by[k].overdue++;
     }
   });
-  const cells = Object.keys(by).sort().map(o => {
-    const c = by[o];
-    return `<div class="sup-cell"><div class="sup-name">${o}</div><div class="sup-nums"><span>未結 ${c.pending}</span>${c.overdue ? `<span style="color:#c0392b">逾期 ${c.overdue}</span>` : ''}<span style="color:#aaa">共 ${c.total}</span></div></div>`;
+  const cells = Object.keys(by).sort().map(k => {
+    const c = by[k];
+    return `<div class="sup-cell"><div class="sup-name">${k}</div><div class="sup-nums"><span>未結 ${c.pending}</span>${c.overdue ? `<span style="color:#c0392b">逾期 ${c.overdue}</span>` : ''}<span style="color:#aaa">共 ${c.total}</span></div></div>`;
   }).join('');
-  el.innerHTML = `<div class="card" style="padding:16px;"><h2 style="margin-bottom:12px;">👥 各承辦人待辦彙整</h2><div class="sup-grid">${cells || '（尚無資料）'}</div></div>`;
+  el.innerHTML = `<div class="card" style="padding:16px;"><h2 style="margin-bottom:12px;">${title}</h2><div class="sup-grid">${cells || '（尚無資料）'}</div></div>`;
   el.style.display = 'block';
+}
+
+// ════════════════════════════════
+//  催辦（Email 通知承辦人）
+// ════════════════════════════════
+async function nudgeOfficer(id) {
+  const r = trackerData.find(x => x.id == id);
+  if (!r) return;
+  if (!(r.officer || '').trim()) { alert('這筆公文沒有承辦人，無法催辦'); return; }
+  if (!getSheetsUrl()) { alert('未設定 Google Sheets，無法寄送催辦'); return; }
+  const note = prompt(`催辦「${r.subject}」給承辦人：${r.officer}\n可輸入給承辦人的留言（選填）：`, '');
+  if (note === null) return;
+  const res = await sheetsRequest({ action: 'nudge', id: r.id, note: note });
+  if (res && res.status === 'ok' && res.data === 'nudged') alert('✅ 已寄出催辦 Email 給 ' + r.officer);
+  else if (res && res.data === 'no-email') alert('⚠️ 通訊錄找不到「' + r.officer + '」的 Email\n請到設定頁的「人員通訊錄」登錄後再試。');
+  else if (res && res.data === 'not-found') alert('⚠️ 雲端找不到這筆公文，請先「上傳本機資料到 Sheets」。');
+  else alert('❌ 催辦失敗：' + JSON.stringify(res));
+}
+
+// ════════════════════════════════
+//  人員通訊錄
+// ════════════════════════════════
+let directoryData = [];
+const DEPT_LIST = ['', '校長室', '教務處', '學務處', '總務處', '輔導室', '附設幼兒園', '幼教研習中心'];
+function renderDirRows() {
+  const wrap = document.getElementById('dir-rows');
+  if (!wrap) return;
+  wrap.innerHTML = directoryData.map((d, i) => `
+    <div style="display:flex;gap:6px;margin-bottom:6px;flex-wrap:wrap;">
+      <input type="text" value="${(d.name || '').replace(/"/g, '&quot;')}" placeholder="姓名" onchange="directoryData[${i}].name=this.value" style="flex:1;min-width:90px;">
+      <select onchange="directoryData[${i}].dept=this.value" style="flex:1;min-width:110px;">
+        ${DEPT_LIST.map(o => `<option value="${o}" ${d.dept === o ? 'selected' : ''}>${o || '（處室）'}</option>`).join('')}
+      </select>
+      <input type="text" value="${(d.email || '').replace(/"/g, '&quot;')}" placeholder="Email" onchange="directoryData[${i}].email=this.value" style="flex:2;min-width:160px;">
+      <button class="btn btn-danger btn-sm" onclick="removeDirRow(${i})">✕</button>
+    </div>`).join('') || '<p style="font-size:.85rem;color:#aaa;">尚無資料，點「新增一列」開始。</p>';
+}
+function addDirRow() { directoryData.push({ name: '', dept: localStorage.getItem('myDept') || '', email: '' }); renderDirRows(); }
+function removeDirRow(i) { directoryData.splice(i, 1); renderDirRows(); }
+function showDirStatus(msg, color) { const el = document.getElementById('dir-status'); el.textContent = msg; el.style.color = color || '#27ae60'; el.style.display = 'block'; setTimeout(() => el.style.display = 'none', 3000); }
+async function loadDirectory() {
+  if (!getSheetsUrl()) { showDirStatus('請先設定 Google Sheets 連線', '#c0392b'); return; }
+  showDirStatus('⏳ 載入中...', '#888');
+  const res = await sheetsRequest({ action: 'getDirectory' });
+  if (res && res.status === 'ok') { directoryData = res.data || []; renderDirRows(); showDirStatus(`✅ 已載入 ${directoryData.length} 筆`, '#27ae60'); }
+  else showDirStatus('❌ 載入失敗', '#c0392b');
+}
+async function saveDirectory() {
+  if (!getSheetsUrl()) { showDirStatus('請先設定 Google Sheets 連線', '#c0392b'); return; }
+  showDirStatus('⏳ 儲存中...', '#888');
+  const res = await sheetsRequest({ action: 'saveDirectory', rows: JSON.stringify(directoryData) });
+  if (res && res.status === 'ok') showDirStatus('✅ 通訊錄已儲存到雲端', '#27ae60');
+  else showDirStatus('❌ 儲存失敗', '#c0392b');
 }
 
 async function updateStatus(id, status) {
@@ -1776,6 +1959,7 @@ async function addManualRecord() {
     deadline: document.getElementById('m-deadline').value || '無',
     status: 'pending',
     officer: (document.getElementById('m-officer').value || localStorage.getItem('officerName') || '').trim(),
+    dept: (document.getElementById('m-dept-sel') ? document.getElementById('m-dept-sel').value : '') || (localStorage.getItem('myDept') || '').trim(),
     content: ''
   };
   // 重複防治
