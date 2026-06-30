@@ -314,6 +314,14 @@
   .ti-soon { border-left-color: #f1c40f; }
   .ti-later { border-left-color: #27ae60; }
 
+  /* ── 檢視切換 / 主管彙整 ── */
+  .view-btn { padding: 5px 14px; border-radius: 16px; border: 1.5px solid #d5c9be; background: #faf8f5; cursor: pointer; font-size: .85rem; transition: .2s; }
+  .view-btn.active { background: #4a3728; color: #fff; border-color: #4a3728; }
+  .sup-grid { display: flex; flex-wrap: wrap; gap: 10px; }
+  .sup-cell { background: #faf8f5; border: 1.5px solid #ede8e3; border-radius: 10px; padding: 10px 14px; min-width: 120px; }
+  .sup-name { font-weight: 700; color: #4a3728; font-size: .9rem; margin-bottom: 4px; }
+  .sup-nums { font-size: .8rem; color: #666; display: flex; gap: 10px; flex-wrap: wrap; }
+
   @media (max-width: 600px) {
     .type-btns { flex-direction: column; }
     .parse-grid { grid-template-columns: 90px 1fr; }
@@ -482,6 +490,16 @@
   <!-- ══════════════ 追蹤頁 ══════════════ -->
   <div id="page-tracker" class="page">
 
+    <!-- 檢視切換：承辦人 / 主管 -->
+    <div style="display:flex;gap:8px;align-items:center;margin-bottom:14px;">
+      <span style="font-size:.85rem;color:#888;">檢視：</span>
+      <button class="view-btn active" data-view="mine" onclick="switchView('mine', this)">👤 我的公文</button>
+      <button class="view-btn" data-view="all" onclick="switchView('all', this)">👥 全部（主管）</button>
+    </div>
+
+    <!-- 主管：各承辦人彙整 -->
+    <div id="supervisor-summary" style="display:none;"></div>
+
     <!-- 統計 -->
     <div class="stats-row">
       <div class="stat-card"><div class="num" id="stat-total">0</div><div class="label">全部公文</div></div>
@@ -507,6 +525,7 @@
           <tr>
             <th>收文日期</th>
             <th>來文機關</th>
+            <th>承辦人</th>
             <th>主旨摘要</th>
             <th>類型</th>
             <th>辦理期限</th>
@@ -598,10 +617,12 @@ function doGet(e) {
   let sheet = ss.getSheetByName(SHEET_NAME);
   if (!sheet) {
     sheet = ss.insertSheet(SHEET_NAME);
-    sheet.appendRow(['id','date','org','subject','type','deadline','status','content']);
+    sheet.appendRow(['id','date','org','subject','type','deadline','status','content','officer']);
   }
+  // 自動補上 officer 欄（第 9 欄），相容舊試算表
+  if (sheet.getRange(1, 9).getValue() !== 'officer') sheet.getRange(1, 9).setValue('officer');
 
-  if (action === 'version') return ok('v2-textformat');
+  if (action === 'version') return ok('v3-officer');
 
   if (action === 'getAll') {
     const data = sheet.getDataRange().getValues();
@@ -632,8 +653,8 @@ function doGet(e) {
     const r = e.parameter;
     const row = sheet.getLastRow() + 1;
     // 先把整列設成純文字格式，避免 id/日期/期限被自動轉成數字或時間戳
-    sheet.getRange(row, 1, 1, 8).setNumberFormat('@');
-    sheet.getRange(row, 1, 1, 8).setValues([[r.id, r.date, r.org, r.subject, r.type, r.deadline, r.status || 'pending', r.content || '']]);
+    sheet.getRange(row, 1, 1, 9).setNumberFormat('@');
+    sheet.getRange(row, 1, 1, 9).setValues([[r.id, r.date, r.org, r.subject, r.type, r.deadline, r.status || 'pending', r.content || '', r.officer || '']]);
     return ok('added');
   }
 
@@ -726,7 +747,7 @@ function sendDailyReminder() {
     if (row[h.status] === 'done') continue;
     const days = gsDaysUntil(row[h.deadline], today, tz);
     if (days === null) continue;
-    const it = { subject: row[h.subject], org: row[h.org], deadline: row[h.deadline], type: row[h.type], days: days };
+    const it = { subject: row[h.subject], org: row[h.org], deadline: row[h.deadline], type: row[h.type], officer: row[h.officer] || '', days: days };
     if (days < 0) b.overdue.push(it);
     else if (days === 0) b.today.push(it);
     else if (days <= 3) b.soon.push(it);
@@ -738,7 +759,7 @@ function sendDailyReminder() {
   const TL = { sign: '簽', letter: '函', draft: '擬辦' };
   function line(it) {
     const d = it.days < 0 ? ('逾期' + Math.abs(it.days) + '天') : it.days === 0 ? '今天到期' : ('剩' + it.days + '天');
-    return '・[' + (TL[it.type] || it.type) + '] ' + it.subject + '（' + it.org + '）— ' + it.deadline + '（' + d + '）';
+    return '・[' + (TL[it.type] || it.type) + '] ' + it.subject + '（' + it.org + '）' + (it.officer ? ' 〔承辦：' + it.officer + '〕' : '') + ' — ' + it.deadline + '（' + d + '）';
   }
   function sec(title, arr) { return arr.length ? (title + '（' + arr.length + '）\n' + arr.map(line).join('\n') + '\n\n') : ''; }
 
@@ -784,6 +805,8 @@ function setupDailyTrigger() {
     <input type="text" id="m-date" placeholder="例：114/06/07">
     <label>來文機關</label>
     <input type="text" id="m-org" placeholder="例：新北市教育局">
+    <label>承辦人</label>
+    <input type="text" id="m-officer" placeholder="預設為設定頁的承辦人">
     <label>主旨摘要<span class="req">*</span></label>
     <input type="text" id="m-subject" placeholder="">
     <label>公文類型</label>
@@ -812,6 +835,7 @@ let uploadedFile = null;
 let parsedData = {};
 let trackerData = JSON.parse(localStorage.getItem('trackerData') || '[]');
 let currentFilter = 'all';
+let currentView = 'mine'; // mine（承辦人本人）/ all（主管全部）
 let lastGeneratedDoc = null;
 
 const receiverDesc = {
@@ -1417,7 +1441,7 @@ async function uploadToSheets() {
     const res = await sheetsRequest({
       action: 'add', id: r.id, date: r.date, org: r.org,
       subject: r.subject, type: r.type, deadline: r.deadline,
-      status: r.status, content: (r.content||'').substring(0,400)
+      status: r.status, officer: r.officer || '', content: (r.content||'').substring(0,400)
     });
     if (res?.status === 'ok') { ok++; existingIds.add(String(r.id)); } else { fail++; }
     await new Promise(r => setTimeout(r, 400));
@@ -1441,6 +1465,7 @@ async function syncFromSheets() {
       type: r.type || 'sign',
       deadline: r.deadline || '無',
       status: r.status || 'pending',
+      officer: r.officer || '',
       content: r.content || ''
     }));
     localStorage.setItem('trackerData', JSON.stringify(trackerData));
@@ -1463,6 +1488,7 @@ async function addToSheets(record) {
     type: record.type,
     deadline: record.deadline,
     status: record.status,
+    officer: record.officer || '',
     content: (record.content || '').substring(0, 400)
   });
   return res || { status: 'error' };
@@ -1535,6 +1561,7 @@ async function saveToTracker() {
     type: lastGeneratedDoc.type,
     deadline: deadline,
     status: 'pending',
+    officer: (localStorage.getItem('officerName') || '').trim(),
     content: `辦理期限：${deadline}\n要完成的工作：\n${tasks || '（未擷取到，請參考原稿）'}`
   };
   // 重複防治：已存在相同公文則擋下
@@ -1580,7 +1607,21 @@ function daysUntilDeadline(deadlineStr) {
 }
 
 function renderTracker() {
-  let data = trackerData;
+  // 檢視過濾：承辦人本人只看自己的（含未指定承辦人的舊資料）；主管看全部
+  const myOfficer = (localStorage.getItem('officerName') || '').trim();
+  let viewData = trackerData;
+  if (currentView === 'mine' && myOfficer) {
+    viewData = trackerData.filter(r => {
+      const o = (r.officer || '').trim();
+      return o === myOfficer || o === '';
+    });
+  }
+
+  // 主管彙整面板
+  renderSupervisorSummary();
+
+  // 狀態過濾
+  let data = viewData;
   if (currentFilter !== 'all') {
     if (currentFilter === 'urgent') {
       data = data.filter(r => {
@@ -1592,11 +1633,11 @@ function renderTracker() {
     }
   }
 
-  // 統計
-  document.getElementById('stat-total').textContent = trackerData.length;
-  document.getElementById('stat-pending').textContent = trackerData.filter(r => r.status === 'pending').length;
-  document.getElementById('stat-done').textContent = trackerData.filter(r => r.status === 'done').length;
-  document.getElementById('stat-urgent').textContent = trackerData.filter(r => {
+  // 統計（依目前檢視範圍）
+  document.getElementById('stat-total').textContent = viewData.length;
+  document.getElementById('stat-pending').textContent = viewData.filter(r => r.status === 'pending').length;
+  document.getElementById('stat-done').textContent = viewData.filter(r => r.status === 'done').length;
+  document.getElementById('stat-urgent').textContent = viewData.filter(r => {
     const d = daysUntilDeadline(r.deadline); return d !== null && d <= 3 && r.status !== 'done';
   }).length;
 
@@ -1626,6 +1667,7 @@ function renderTracker() {
     return `<tr>
       <td>${r.date}</td>
       <td>${r.org}</td>
+      <td>${r.officer || '—'}</td>
       <td style="max-width:200px;word-break:break-all;">${r.subject}</td>
       <td><span class="badge ${typeBadge[r.type]}">${typeLabel[r.type]}</span></td>
       <td>${deadlineHtml}</td>
@@ -1649,6 +1691,36 @@ function filterTracker(filter, btn) {
   document.querySelectorAll('.filter-btn').forEach(b => b.classList.remove('active'));
   btn.classList.add('active');
   renderTracker();
+}
+
+function switchView(v, btn) {
+  currentView = v;
+  document.querySelectorAll('.view-btn').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+  renderTracker();
+}
+
+// 主管檢視：各承辦人待辦／逾期彙整
+function renderSupervisorSummary() {
+  const el = document.getElementById('supervisor-summary');
+  if (currentView !== 'all') { el.style.display = 'none'; return; }
+  const by = {};
+  trackerData.forEach(r => {
+    const o = (r.officer || '').trim() || '（未指定）';
+    if (!by[o]) by[o] = { pending: 0, overdue: 0, total: 0 };
+    by[o].total++;
+    if (r.status !== 'done') {
+      by[o].pending++;
+      const d = daysUntilDeadline(r.deadline);
+      if (d !== null && d < 0) by[o].overdue++;
+    }
+  });
+  const cells = Object.keys(by).sort().map(o => {
+    const c = by[o];
+    return `<div class="sup-cell"><div class="sup-name">${o}</div><div class="sup-nums"><span>未結 ${c.pending}</span>${c.overdue ? `<span style="color:#c0392b">逾期 ${c.overdue}</span>` : ''}<span style="color:#aaa">共 ${c.total}</span></div></div>`;
+  }).join('');
+  el.innerHTML = `<div class="card" style="padding:16px;"><h2 style="margin-bottom:12px;">👥 各承辦人待辦彙整</h2><div class="sup-grid">${cells || '（尚無資料）'}</div></div>`;
+  el.style.display = 'block';
 }
 
 async function updateStatus(id, status) {
@@ -1686,6 +1758,7 @@ async function clearAllRecords() {
 //  手動新增 Modal
 // ════════════════════════════════
 function openAddModal() {
+  document.getElementById('m-officer').value = localStorage.getItem('officerName') || '';
   document.getElementById('modal-overlay').style.display = 'flex';
 }
 function closeModal() {
@@ -1702,6 +1775,7 @@ async function addManualRecord() {
     type: document.getElementById('m-type').value,
     deadline: document.getElementById('m-deadline').value || '無',
     status: 'pending',
+    officer: (document.getElementById('m-officer').value || localStorage.getItem('officerName') || '').trim(),
     content: ''
   };
   // 重複防治
