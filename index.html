@@ -437,9 +437,11 @@
           <span class="key">辦理期限：</span>
           <input type="text" id="pr-deadline" placeholder="例：114年7月31日 或 無期限要求">
           <span class="key">公文承辦人：</span>
-          <input type="text" id="pr-officer" list="officer-datalist" placeholder="自動帶入，可自行輸入或從通訊錄選">
+          <div style="display:flex;gap:6px;flex-wrap:wrap;">
+            <select id="pr-officer" style="flex:1;min-width:150px;" onchange="toggleCustomOfficer(this,'pr-officer-custom')"></select>
+            <input type="text" id="pr-officer-custom" placeholder="輸入承辦人姓名" style="flex:1;min-width:130px;display:none;padding:5px 8px;font-size:.88rem;background:#fff;">
+          </div>
         </div>
-        <datalist id="officer-datalist"></datalist>
         <div class="parse-actions">
           <button class="btn btn-primary btn-sm" onclick="generateDoc()">✅ 確認，開始產稿</button>
           <button class="btn btn-outline btn-sm" onclick="dismissParse()">略過解析</button>
@@ -926,7 +928,8 @@ function setupDailyTrigger() {
     <label>來文機關</label>
     <input type="text" id="m-org" placeholder="例：新北市教育局">
     <label>承辦人</label>
-    <input type="text" id="m-officer" list="officer-datalist" placeholder="預設為設定頁的承辦人，可從通訊錄選">
+    <select id="m-officer" style="width:100%;margin-top:2px;" onchange="toggleCustomOfficer(this,'m-officer-custom')"></select>
+    <input type="text" id="m-officer-custom" placeholder="輸入承辦人姓名" style="display:none;margin-top:6px;">
     <label>處室</label>
     <select id="m-dept-sel" style="width:100%;margin-top:2px;">
       <option value="">（預設為設定頁的處室）</option>
@@ -1256,10 +1259,8 @@ async function parseDocument(content, fileType, key) {
       document.getElementById('pr-docno').value = parsedData.docno || '';
       document.getElementById('pr-subject').value = parsedData.subject || '';
       document.getElementById('pr-deadline').value = parsedData.deadline || '';
-      // 承辦人：自動帶入設定頁的承辦人（可自行改或從通訊錄選）
-      if (!document.getElementById('pr-officer').value) {
-        document.getElementById('pr-officer').value = localStorage.getItem('officerName') || '';
-      }
+      // 承辦人：自動帶入設定頁的承辦人（可從下拉改選或自行輸入）
+      fillOfficerSelect('pr-officer', 'pr-officer-custom', localStorage.getItem('officerName') || '');
       document.getElementById('parse-result').classList.add('show');
 
       // 若來文文字可提取，填入文字框
@@ -1269,9 +1270,7 @@ async function parseDocument(content, fileType, key) {
     }
   } catch(e) {
     console.error(e);
-    if (!document.getElementById('pr-officer').value) {
-      document.getElementById('pr-officer').value = localStorage.getItem('officerName') || '';
-    }
+    fillOfficerSelect('pr-officer', 'pr-officer-custom', localStorage.getItem('officerName') || '');
     document.getElementById('parse-result').classList.add('show');
   }
 }
@@ -1480,7 +1479,7 @@ ${isDraft ? '（函稿）\n' : ''}受文者：
 
     const result = await callGemini(parts, key);
     // 承辦人：解析框輸入優先，其次設定頁；若在通訊錄找得到，自動帶其處室
-    const docOfficer = (document.getElementById('pr-officer')?.value || localStorage.getItem('officerName') || '').trim();
+    const docOfficer = (readOfficerValue('pr-officer', 'pr-officer-custom') || localStorage.getItem('officerName') || '').trim();
     const dirHit = directoryData.find(d => (d.name || '').trim() === docOfficer && docOfficer !== '');
     const docDept = dirHit ? (dirHit.dept || '') : (localStorage.getItem('myDept') || '');
     lastGeneratedDoc = {
@@ -1959,19 +1958,63 @@ async function loadDirectory() {
   else showDirStatus('❌ 載入失敗', '#c0392b');
 }
 
-// 通訊錄 → 承辦人下拉建議（依角色限制可選範圍）
+// 依角色計算可選的承辦人名單
 // 校長：全校任何人；處室主管：僅本處室人員；一般承辦人：全校（方便選同僚協辦）
-function renderOfficerDatalist() {
-  const dl = document.getElementById('officer-datalist');
-  if (!dl) return;
+function getSelectableOfficers() {
   const role = localStorage.getItem('myRole') || 'officer';
   const myDept = (localStorage.getItem('myDept') || '').trim();
   let list = directoryData.filter(d => (d.name || '').trim());
   if (role === 'supervisor' && myDept) {
     list = list.filter(d => (d.dept || '').trim() === myDept);
   }
-  dl.innerHTML = list
-    .map(d => `<option value="${(d.name || '').replace(/"/g, '&quot;')}">${d.dept || ''}</option>`).join('');
+  return list;
+}
+
+// 把可選名單填入承辦人下拉（select），並保留「自行輸入」選項
+function fillOfficerSelect(selId, customId, preferred) {
+  const sel = document.getElementById(selId);
+  if (!sel) return;
+  const list = getSelectableOfficers();
+  const esc = s => (s || '').replace(/"/g, '&quot;');
+  const cur = preferred || sel.value || localStorage.getItem('officerName') || '';
+  sel.innerHTML = list.map(d =>
+    `<option value="${esc(d.name)}">${esc(d.name)}${d.dept ? '（' + esc(d.dept) + '）' : ''}</option>`
+  ).join('') + '<option value="__custom">✏️（自行輸入…）</option>';
+  const custom = document.getElementById(customId);
+  if (cur && list.some(d => (d.name || '').trim() === cur.trim())) {
+    sel.value = cur.trim();
+    if (custom) custom.style.display = 'none';
+  } else if (cur && cur !== '__custom') {
+    sel.value = '__custom';
+    if (custom) { custom.style.display = ''; custom.value = cur; }
+  } else if (list.length) {
+    sel.selectedIndex = 0;
+    if (custom) custom.style.display = 'none';
+  }
+}
+
+function toggleCustomOfficer(sel, customId) {
+  const custom = document.getElementById(customId);
+  if (!custom) return;
+  custom.style.display = sel.value === '__custom' ? '' : 'none';
+  if (sel.value === '__custom') custom.focus();
+}
+
+// 讀取承辦人欄最終值（select 或自行輸入）
+function readOfficerValue(selId, customId) {
+  const sel = document.getElementById(selId);
+  if (!sel) return '';
+  if (sel.value === '__custom') {
+    const custom = document.getElementById(customId);
+    return custom ? custom.value.trim() : '';
+  }
+  return (sel.value || '').trim();
+}
+
+// 相容舊呼叫點：通訊錄載入後 / 角色變更後，重填兩個承辦人下拉
+function renderOfficerDatalist() {
+  fillOfficerSelect('pr-officer', 'pr-officer-custom');
+  fillOfficerSelect('m-officer', 'm-officer-custom');
 }
 async function saveDirectory() {
   if (!getSheetsUrl()) { showDirStatus('請先設定 Google Sheets 連線', '#c0392b'); return; }
@@ -2016,7 +2059,7 @@ async function clearAllRecords() {
 //  手動新增 Modal
 // ════════════════════════════════
 function openAddModal() {
-  document.getElementById('m-officer').value = localStorage.getItem('officerName') || '';
+  fillOfficerSelect('m-officer', 'm-officer-custom', localStorage.getItem('officerName') || '');
   document.getElementById('modal-overlay').style.display = 'flex';
 }
 function closeModal() {
@@ -2033,7 +2076,7 @@ async function addManualRecord() {
     type: document.getElementById('m-type').value,
     deadline: document.getElementById('m-deadline').value || '無',
     status: 'pending',
-    officer: (document.getElementById('m-officer').value || localStorage.getItem('officerName') || '').trim(),
+    officer: (readOfficerValue('m-officer', 'm-officer-custom') || localStorage.getItem('officerName') || '').trim(),
     dept: (document.getElementById('m-dept-sel') ? document.getElementById('m-dept-sel').value : '') || (localStorage.getItem('myDept') || '').trim(),
     content: ''
   };
