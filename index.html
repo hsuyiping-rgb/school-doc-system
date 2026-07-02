@@ -581,6 +581,9 @@
         <option value="附設幼兒園">附設幼兒園</option>
         <option value="幼教研習中心">幼教研習中心</option>
       </select>
+      <label>每日提醒信箱 <span class="opt">選填，多人用逗號分隔</span></label>
+      <input type="text" id="reminder-email" placeholder="例：principal@apps.ntpc.edu.tw">
+      <p style="font-size:.8rem;color:#888;margin-top:4px;">每日待辦提醒信會寄到這裡（儲存後會寫入雲端，供排程寄信使用）。</p>
       <div style="margin-top:14px;">
         <button class="btn btn-primary" onclick="saveSettings()">儲存設定</button>
       </div>
@@ -637,6 +640,7 @@
         <div style="position:relative;margin-top:10px;">
           <textarea id="apps-script-code" readonly rows="12" style="font-size:.75rem;font-family:monospace;background:#fff;color:#333;resize:none;width:100%;border:1px solid #ddd;border-radius:6px;padding:10px;">const SHEET_NAME = '公文追蹤';
 const DIR_SHEET = '通訊錄';
+const CONFIG_SHEET = '系統設定';
 
 function doPost(e) {
   return doGet(e);
@@ -654,7 +658,16 @@ function doGet(e) {
   if (sheet.getRange(1, 9).getValue() !== 'officer') sheet.getRange(1, 9).setValue('officer');
   if (sheet.getRange(1, 10).getValue() !== 'dept') sheet.getRange(1, 10).setValue('dept');
 
-  if (action === 'version') return ok('v4-dept');
+  if (action === 'version') return ok('v5-config');
+
+  // ── 系統設定（key/value）──
+  if (action === 'getConfig') {
+    return ok(gsGetConfig(ss, e.parameter.key));
+  }
+  if (action === 'setConfig') {
+    gsSetConfig(ss, e.parameter.key, e.parameter.value || '');
+    return ok('saved');
+  }
 
   if (action === 'getAll') {
     const data = sheet.getDataRange().getValues();
@@ -776,6 +789,26 @@ function ok(data) {
     .setMimeType(ContentService.MimeType.JSON);
 }
 
+// 系統設定 key/value 存取
+function gsGetConfig(ss, key) {
+  const sh = ss.getSheetByName(CONFIG_SHEET);
+  if (!sh) return '';
+  const d = sh.getDataRange().getValues();
+  for (let i = 0; i < d.length; i++) {
+    if (String(d[i][0]) === String(key)) return String(d[i][1] || '');
+  }
+  return '';
+}
+function gsSetConfig(ss, key, value) {
+  let sh = ss.getSheetByName(CONFIG_SHEET);
+  if (!sh) { sh = ss.insertSheet(CONFIG_SHEET); sh.appendRow(['key', 'value']); }
+  const d = sh.getDataRange().getValues();
+  for (let i = 0; i < d.length; i++) {
+    if (String(d[i][0]) === String(key)) { sh.getRange(i + 1, 2).setValue(value); return; }
+  }
+  sh.appendRow([key, value]);
+}
+
 // ===== 每日待辦 Email 提醒（階段三）=====
 // 收件者（多人用逗號分隔）。留空＝寄給試算表擁有者本人。主管可加自己的信箱。
 const REMINDER_EMAILS = '';
@@ -853,7 +886,8 @@ function sendDailyReminder() {
   body += sec('[' + REMINDER_DAYS_AHEAD + '天內到期]', b.week);
   body += '———\n本信由「學校行政公文系統」自動發送。';
 
-  const to = REMINDER_EMAILS.trim() || Session.getEffectiveUser().getEmail();
+  const cfgEmail = gsGetConfig(ss, 'reminderEmail');
+  const to = (cfgEmail && cfgEmail.trim()) || REMINDER_EMAILS.trim() || Session.getEffectiveUser().getEmail();
   GmailApp.sendEmail(to, subject, body);
 }
 
@@ -957,6 +991,7 @@ window.onload = function() {
   document.getElementById('officer-title').value = localStorage.getItem('officerTitle') || '';
   document.getElementById('my-role').value = localStorage.getItem('myRole') || 'officer';
   document.getElementById('my-dept').value = localStorage.getItem('myDept') || '';
+  document.getElementById('reminder-email').value = localStorage.getItem('reminderEmail') || '';
   const DEFAULT_SHEETS_URL = 'https://script.google.com/macros/s/AKfycbyyZhrjTMzPHoI72_VNP1oHddHsiEm_Y3wAfe-D93AumydmzBb0Ipu8hJvm3iW1E30a/exec';
   if (!localStorage.getItem('sheetsUrl')) localStorage.setItem('sheetsUrl', DEFAULT_SHEETS_URL);
   document.getElementById('sheets-url').value = localStorage.getItem('sheetsUrl') || DEFAULT_SHEETS_URL;
@@ -1144,7 +1179,11 @@ function saveSettings() {
   localStorage.setItem('officerTitle', document.getElementById('officer-title').value);
   localStorage.setItem('myRole', document.getElementById('my-role').value);
   localStorage.setItem('myDept', document.getElementById('my-dept').value);
+  const remindEmail = document.getElementById('reminder-email').value.trim();
+  localStorage.setItem('reminderEmail', remindEmail);
   applyRoleToViews(); renderTracker(); // 角色/處室變更即時反映
+  // 寫入雲端設定，供每日排程寄信使用
+  if (getSheetsUrl()) sheetsRequest({ action: 'setConfig', key: 'reminderEmail', value: remindEmail });
   document.getElementById('settings-status').style.display = 'block';
   setTimeout(() => document.getElementById('settings-status').style.display = 'none', 2000);
 }
