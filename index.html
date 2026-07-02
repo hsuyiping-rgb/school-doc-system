@@ -1877,6 +1877,7 @@ function applyRoleToViews() {
   else if (role === 'principal') def = 'all';
   currentView = def;
   document.querySelectorAll('.view-btn').forEach(b => b.classList.toggle('active', b.dataset.view === def));
+  renderOfficerDatalist(); // 角色/處室變更時，承辦人下拉可選範圍需重新計算
 }
 
 // 主管／校長彙整：全校→各處室；我的處室→各承辦人
@@ -1958,12 +1959,18 @@ async function loadDirectory() {
   else showDirStatus('❌ 載入失敗', '#c0392b');
 }
 
-// 通訊錄 → 承辦人下拉建議（各處室承辦人/主任）
+// 通訊錄 → 承辦人下拉建議（依角色限制可選範圍）
+// 校長：全校任何人；處室主管：僅本處室人員；一般承辦人：全校（方便選同僚協辦）
 function renderOfficerDatalist() {
   const dl = document.getElementById('officer-datalist');
   if (!dl) return;
-  dl.innerHTML = directoryData
-    .filter(d => (d.name || '').trim())
+  const role = localStorage.getItem('myRole') || 'officer';
+  const myDept = (localStorage.getItem('myDept') || '').trim();
+  let list = directoryData.filter(d => (d.name || '').trim());
+  if (role === 'supervisor' && myDept) {
+    list = list.filter(d => (d.dept || '').trim() === myDept);
+  }
+  dl.innerHTML = list
     .map(d => `<option value="${(d.name || '').replace(/"/g, '&quot;')}">${d.dept || ''}</option>`).join('');
 }
 async function saveDirectory() {
