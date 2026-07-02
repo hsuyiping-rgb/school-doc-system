@@ -436,7 +436,10 @@
           <input type="text" id="pr-subject" placeholder="（未識別）">
           <span class="key">辦理期限：</span>
           <input type="text" id="pr-deadline" placeholder="例：114年7月31日 或 無期限要求">
+          <span class="key">公文承辦人：</span>
+          <input type="text" id="pr-officer" list="officer-datalist" placeholder="自動帶入，可自行輸入或從通訊錄選">
         </div>
+        <datalist id="officer-datalist"></datalist>
         <div class="parse-actions">
           <button class="btn btn-primary btn-sm" onclick="generateDoc()">✅ 確認，開始產稿</button>
           <button class="btn btn-outline btn-sm" onclick="dismissParse()">略過解析</button>
@@ -921,7 +924,7 @@ function setupDailyTrigger() {
     <label>來文機關</label>
     <input type="text" id="m-org" placeholder="例：新北市教育局">
     <label>承辦人</label>
-    <input type="text" id="m-officer" placeholder="預設為設定頁的承辦人">
+    <input type="text" id="m-officer" list="officer-datalist" placeholder="預設為設定頁的承辦人，可從通訊錄選">
     <label>處室</label>
     <select id="m-dept-sel" style="width:100%;margin-top:2px;">
       <option value="">（預設為設定頁的處室）</option>
@@ -1249,6 +1252,10 @@ async function parseDocument(content, fileType, key) {
       document.getElementById('pr-docno').value = parsedData.docno || '';
       document.getElementById('pr-subject').value = parsedData.subject || '';
       document.getElementById('pr-deadline').value = parsedData.deadline || '';
+      // 承辦人：自動帶入設定頁的承辦人（可自行改或從通訊錄選）
+      if (!document.getElementById('pr-officer').value) {
+        document.getElementById('pr-officer').value = localStorage.getItem('officerName') || '';
+      }
       document.getElementById('parse-result').classList.add('show');
 
       // 若來文文字可提取，填入文字框
@@ -1258,6 +1265,9 @@ async function parseDocument(content, fileType, key) {
     }
   } catch(e) {
     console.error(e);
+    if (!document.getElementById('pr-officer').value) {
+      document.getElementById('pr-officer').value = localStorage.getItem('officerName') || '';
+    }
     document.getElementById('parse-result').classList.add('show');
   }
 }
@@ -1465,12 +1475,18 @@ ${isDraft ? '（函稿）\n' : ''}受文者：
     }
 
     const result = await callGemini(parts, key);
+    // 承辦人：解析框輸入優先，其次設定頁；若在通訊錄找得到，自動帶其處室
+    const docOfficer = (document.getElementById('pr-officer')?.value || localStorage.getItem('officerName') || '').trim();
+    const dirHit = directoryData.find(d => (d.name || '').trim() === docOfficer && docOfficer !== '');
+    const docDept = dirHit ? (dirHit.dept || '') : (localStorage.getItem('myDept') || '');
     lastGeneratedDoc = {
       type: currentType,
       org: org || document.getElementById('pr-org').value,
       docno,
       subject: subject || purpose,
       deadline,
+      officer: docOfficer,
+      dept: docDept,
       content: result,
       date: (() => { const t = new Date(); const r = t.getFullYear()-1911; return `${r}/${String(t.getMonth()+1).padStart(2,'0')}/${String(t.getDate()).padStart(2,'0')}`; })()
     };
@@ -1701,8 +1717,8 @@ async function saveToTracker() {
     type: lastGeneratedDoc.type,
     deadline: deadline,
     status: 'pending',
-    officer: (localStorage.getItem('officerName') || '').trim(),
-    dept: (localStorage.getItem('myDept') || '').trim(),
+    officer: (lastGeneratedDoc.officer || localStorage.getItem('officerName') || '').trim(),
+    dept: (lastGeneratedDoc.dept || localStorage.getItem('myDept') || '').trim(),
     content: `辦理期限：${deadline}\n要完成的工作：\n${tasks || '（未擷取到，請參考原稿）'}`
   };
   // 重複防治：已存在相同公文則擋下
@@ -1934,8 +1950,17 @@ async function loadDirectory() {
   if (!getSheetsUrl()) { showDirStatus('請先設定 Google Sheets 連線', '#c0392b'); return; }
   showDirStatus('⏳ 載入中...', '#888');
   const res = await sheetsRequest({ action: 'getDirectory' });
-  if (res && res.status === 'ok') { directoryData = res.data || []; renderDirRows(); showDirStatus(`✅ 已載入 ${directoryData.length} 筆`, '#27ae60'); }
+  if (res && res.status === 'ok') { directoryData = res.data || []; renderDirRows(); renderOfficerDatalist(); showDirStatus(`✅ 已載入 ${directoryData.length} 筆`, '#27ae60'); }
   else showDirStatus('❌ 載入失敗', '#c0392b');
+}
+
+// 通訊錄 → 承辦人下拉建議（各處室承辦人/主任）
+function renderOfficerDatalist() {
+  const dl = document.getElementById('officer-datalist');
+  if (!dl) return;
+  dl.innerHTML = directoryData
+    .filter(d => (d.name || '').trim())
+    .map(d => `<option value="${(d.name || '').replace(/"/g, '&quot;')}">${d.dept || ''}</option>`).join('');
 }
 async function saveDirectory() {
   if (!getSheetsUrl()) { showDirStatus('請先設定 Google Sheets 連線', '#c0392b'); return; }
