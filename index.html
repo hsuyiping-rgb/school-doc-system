@@ -583,6 +583,8 @@
         <option value="輔導室">輔導室</option>
         <option value="附設幼兒園">附設幼兒園</option>
         <option value="幼教研習中心">幼教研習中心</option>
+        <option value="人事室">人事室</option>
+        <option value="主計室">主計室</option>
       </select>
       <label>每日提醒信箱 <span class="opt">選填，多人用逗號分隔</span></label>
       <input type="text" id="reminder-email" placeholder="例：principal@apps.ntpc.edu.tw">
@@ -935,6 +937,8 @@ function setupDailyTrigger() {
       <option value="輔導室">輔導室</option>
       <option value="附設幼兒園">附設幼兒園</option>
       <option value="幼教研習中心">幼教研習中心</option>
+      <option value="人事室">人事室</option>
+      <option value="主計室">主計室</option>
     </select>
     <label>主旨摘要<span class="req">*</span></label>
     <input type="text" id="m-subject" placeholder="">
@@ -1929,7 +1933,7 @@ async function nudgeOfficer(id) {
 //  人員通訊錄
 // ════════════════════════════════
 let directoryData = [];
-const DEPT_LIST = ['', '校長室', '教務處', '學務處', '總務處', '輔導室', '附設幼兒園', '幼教研習中心'];
+const DEPT_LIST = ['', '校長室', '教務處', '學務處', '總務處', '輔導室', '附設幼兒園', '幼教研習中心', '人事室', '主計室'];
 function renderDirRows() {
   const wrap = document.getElementById('dir-rows');
   if (!wrap) return;
