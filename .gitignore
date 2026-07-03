@@ -1,0 +1,16 @@
+# Claude Code 本機設定
+.claude/
+
+# Google Sheets 捷徑檔（本機路徑，不進版控）
+*.gsheet
+
+# 社群 / 暫存圖片（非專案資源）
+*.jpg
+*.jpeg
+*.png
+!docs/**/*.png
+
+# 系統雜檔
+Thumbs.db
+Desktop.ini
+.DS_Store
