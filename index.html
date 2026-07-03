@@ -643,7 +643,8 @@
           <li>執行身分：「我」，存取權：「任何人」→ 點「部署」</li>
           <li>複製產生的網址，貼到上方欄位</li>
         </ol>
-        <p style="font-size:.82rem;color:#4a3728;margin-top:10px;line-height:1.8;">📧 <b>每日 Email 提醒（選用）</b>：貼好上方程式碼後，在 Apps Script 上方函式選單選「<b>setupDailyTrigger</b>」按▶執行一次（會要求授權），即可在每個上班日早上自動寄出今日待辦信。主管想收信可在程式碼 <code>REMINDER_EMAILS</code> 填入信箱（多人用逗號分隔）。</p>
+        <p style="font-size:.82rem;color:#4a3728;margin-top:10px;line-height:1.8;">📧 <b>每日 Email 提醒（選用）</b>：貼好上方程式碼後，在 Apps Script 上方函式選單選「<b>setupDailyTrigger</b>」按▶執行一次（會要求授權），即可在每個上班日早上自動寄出今日待辦彙總信給管理者。主管想收信可在程式碼 <code>REMINDER_EMAILS</code> 填入信箱（多人用逗號分隔）。</p>
+        <p style="font-size:.82rem;color:#4a3728;margin-top:8px;line-height:1.8;">🔔 <b>承辦人自動催辦（選用）</b>：另選「<b>setupOfficerReminderTrigger</b>」按▶執行一次，即可在每個上班日早上，將「期限 7 日內或已逾期」的公文<b>依承辦人分別寄信提醒</b>（Email 取自「人員通訊錄」）。沒填承辦人或通訊錄查無 Email 的公文，會彙整成一封寄給上方「每日提醒信箱」，提醒補登。</p>
         <div style="position:relative;margin-top:10px;">
           <textarea id="apps-script-code" readonly rows="12" style="font-size:.75rem;font-family:monospace;background:#fff;color:#333;resize:none;width:100%;border:1px solid #ddd;border-radius:6px;padding:10px;">const SHEET_NAME = '公文追蹤';
 const DIR_SHEET = '通訊錄';
@@ -665,7 +666,7 @@ function doGet(e) {
   if (sheet.getRange(1, 9).getValue() !== 'officer') sheet.getRange(1, 9).setValue('officer');
   if (sheet.getRange(1, 10).getValue() !== 'dept') sheet.getRange(1, 10).setValue('dept');
 
-  if (action === 'version') return ok('v5-config');
+  if (action === 'version') return ok('v6-officer-reminder');
 
   // ── 系統設定（key/value）──
   if (action === 'getConfig') {
@@ -715,6 +716,18 @@ function doGet(e) {
     for (let i = 1; i < data.length; i++) {
       if (String(data[i][0]) === String(e.parameter.id)) {
         sheet.getRange(i + 1, 7).setValue(e.parameter.status);
+        break;
+      }
+    }
+    return ok('updated');
+  }
+
+  if (action === 'updateOfficer') {
+    const data = sheet.getDataRange().getValues();
+    for (let i = 1; i < data.length; i++) {
+      if (String(data[i][0]) === String(e.parameter.id)) {
+        sheet.getRange(i + 1, 9).setNumberFormat('@').setValue(e.parameter.officer || '');
+        sheet.getRange(i + 1, 10).setNumberFormat('@').setValue(e.parameter.dept || '');
         break;
       }
     }
@@ -904,6 +917,92 @@ function setupDailyTrigger() {
     if (t.getHandlerFunction() === 'sendDailyReminder') ScriptApp.deleteTrigger(t);
   });
   ScriptApp.newTrigger('sendDailyReminder').timeBased().everyDays(1).atHour(7).create();
+}
+
+// ===== 承辦人個別催辦提醒（期限 7 日內、含逾期，逐人寄信）=====
+// 每個上班日各寄一次：把「未結案且期限 7 日內或已逾期」的公文，依承辦人分組，
+// 各寄一封提醒給該承辦人（Email 取自「通訊錄」）。
+// 沒填承辦人、或承辦人不在通訊錄的公文，彙整成一封寄給管理者（reminderEmail）。
+const OFFICER_REMINDER_DAYS = 7;
+
+function sendOfficerReminders() {
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const tz = ss.getSpreadsheetTimeZone();
+  const now = new Date();
+  if (!gsIsWorkingDay(now, tz)) return;
+  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  const sheet = ss.getSheetByName(SHEET_NAME);
+  if (!sheet) return;
+  const data = sheet.getDataRange().getValues();
+  if (data.length <= 1) return;
+  const h = {};
+  data[0].forEach((name, i) => h[name] = i);
+
+  // 承辦人姓名 → Email（通訊錄）
+  const dirMap = {};
+  const dir = ss.getSheetByName(DIR_SHEET);
+  if (dir) {
+    const dd = dir.getDataRange().getValues();
+    for (let i = 1; i < dd.length; i++) {
+      const nm = String(dd[i][0] || '').trim();
+      if (nm) dirMap[nm] = String(dd[i][2] || '').trim();
+    }
+  }
+
+  const TL = { sign: '簽', letter: '函', draft: '擬辦' };
+  const byOfficer = {}; // email -> { officer, items:[] }
+  const orphan = [];    // 沒承辦人 / 通訊錄查無 Email
+  for (let i = 1; i < data.length; i++) {
+    const row = data[i];
+    if (row[h.status] === 'done') continue;
+    const days = gsDaysUntil(row[h.deadline], today, tz);
+    if (days === null) continue;
+    if (days > OFFICER_REMINDER_DAYS) continue; // 只留 7 日內＋逾期
+    const it = { subject: row[h.subject], org: row[h.org], deadline: row[h.deadline], type: row[h.type], officer: String(row[h.officer] || '').trim(), days: days };
+    const email = it.officer ? (dirMap[it.officer] || '') : '';
+    if (email) {
+      if (!byOfficer[email]) byOfficer[email] = { officer: it.officer, items: [] };
+      byOfficer[email].items.push(it);
+    } else {
+      orphan.push(it);
+    }
+  }
+
+  function dstr(d) { return d < 0 ? ('已逾期' + Math.abs(d) + '天') : d === 0 ? '今天到期' : ('剩' + d + '天'); }
+  function line(it) {
+    return '・[' + (TL[it.type] || it.type) + '] ' + it.subject + '（' + it.org + '） — 期限 ' + it.deadline + '（' + dstr(it.days) + '）';
+  }
+  const rocDate = (now.getFullYear() - 1911) + '年' + (now.getMonth() + 1) + '月' + now.getDate() + '日';
+
+  // 逐一寄給承辦人
+  Object.keys(byOfficer).forEach(email => {
+    const g = byOfficer[email];
+    g.items.sort((a, b) => a.days - b.days);
+    const subject = '【公文催辦提醒】您有 ' + g.items.length + ' 件公文於 ' + OFFICER_REMINDER_DAYS + ' 日內到期（含逾期）';
+    const body = g.officer + ' 您好：\n\n以下是您承辦、期限在 ' + OFFICER_REMINDER_DAYS + ' 日內（含已逾期）的公文，請儘速辦理：\n\n' +
+      g.items.map(line).join('\n') +
+      '\n\n（' + rocDate + ' 系統自動提醒）\n———\n本信由「學校行政公文系統」自動發送，請勿直接回覆。';
+    GmailApp.sendEmail(email, subject, body);
+  });
+
+  // 漏網公文彙整給管理者
+  if (orphan.length) {
+    orphan.sort((a, b) => a.days - b.days);
+    const to = (gsGetConfig(ss, 'reminderEmail') || '').trim() || Session.getEffectiveUser().getEmail();
+    const subject = '【公文催辦－待補承辦人】' + orphan.length + ' 件公文 ' + OFFICER_REMINDER_DAYS + ' 日內到期但無法個別催辦';
+    const body = rocDate + '　下列公文將於 ' + OFFICER_REMINDER_DAYS + ' 日內到期（含已逾期），但因「未填承辦人」或「承辦人不在通訊錄」，無法自動寄給承辦人，請補登後處理：\n\n' +
+      orphan.map(it => line(it) + (it.officer ? '　〔承辦：' + it.officer + '，通訊錄查無 Email〕' : '　〔未填承辦人〕')).join('\n') +
+      '\n\n———\n本信由「學校行政公文系統」自動發送。';
+    GmailApp.sendEmail(to, subject, body);
+  }
+}
+
+// 只需手動執行一次：建立「每天早上 7~8 點」承辦人催辦觸發器（非上班日由函式內部跳過）
+function setupOfficerReminderTrigger() {
+  ScriptApp.getProjectTriggers().forEach(t => {
+    if (t.getHandlerFunction() === 'sendOfficerReminders') ScriptApp.deleteTrigger(t);
+  });
+  ScriptApp.newTrigger('sendOfficerReminders').timeBased().everyDays(1).atHour(7).create();
 }</textarea>
           <button class="btn btn-outline btn-sm" onclick="copyScript()" style="margin-top:6px;">📋 複製程式碼</button>
         </div>
@@ -1830,7 +1929,7 @@ function renderTracker() {
     return `<tr>
       <td>${r.date}</td>
       <td>${r.org}</td>
-      <td>${r.officer || '—'}${r.dept ? `<br><span style="font-size:.75rem;color:#aaa;">${r.dept}</span>` : ''}</td>
+      <td id="off-cell-${r.id}">${r.officer || '—'}${r.dept ? `<br><span style="font-size:.75rem;color:#aaa;">${r.dept}</span>` : ''}<button class="btn btn-sm" style="padding:1px 5px;font-size:.72rem;background:#eee;color:#555;margin-left:3px;" onclick="editOfficer(${r.id})" title="改承辦人">✏️</button></td>
       <td style="max-width:200px;word-break:break-all;">${r.subject}</td>
       <td><span class="badge ${typeBadge[r.type]}">${typeLabel[r.type]}</span></td>
       <td>${deadlineHtml}</td>
@@ -2032,6 +2131,54 @@ async function updateStatus(id, status) {
     renderTracker();
     await updateStatusInSheets(id, status);
   }
+}
+
+// 追蹤頁：就地編輯既有公文的承辦人
+function editOfficer(id) {
+  const cell = document.getElementById('off-cell-' + id);
+  if (!cell) return;
+  const r = trackerData.find(x => x.id == id);
+  const cur = ((r && r.officer) || '').trim();
+  const list = getSelectableOfficers();
+  const esc = s => (s || '').replace(/"/g, '&quot;');
+  const inList = list.some(d => (d.name || '').trim() === cur);
+  const opts =
+    list.map(d => `<option value="${esc(d.name)}" ${d.name.trim() === cur ? 'selected' : ''}>${esc(d.name)}${d.dept ? '（' + esc(d.dept) + '）' : ''}</option>`).join('') +
+    `<option value="__custom" ${(!inList && cur) ? 'selected' : ''}>✏️（自行輸入…）</option>` +
+    `<option value="__none" ${!cur ? 'selected' : ''}>（清除／未指定）</option>`;
+  cell.innerHTML =
+    `<select id="off-sel-${id}" style="width:100%;min-width:120px;" onchange="document.getElementById('off-cus-${id}').style.display=this.value==='__custom'?'':'none'">${opts}</select>` +
+    `<input type="text" id="off-cus-${id}" value="${(!inList && cur) ? esc(cur) : ''}" placeholder="輸入承辦人姓名" style="display:${(!inList && cur) ? '' : 'none'};width:100%;margin-top:4px;font-size:.82rem;">` +
+    `<div style="margin-top:4px;white-space:nowrap;">` +
+    `<button class="btn btn-sm" style="background:#27ae60;color:#fff;padding:2px 8px;margin-right:4px;" onclick="confirmOfficer(${id})">✓ 儲存</button>` +
+    `<button class="btn btn-outline btn-sm" style="padding:2px 8px;" onclick="renderTracker()">✕</button>` +
+    `</div>`;
+}
+
+async function confirmOfficer(id) {
+  const sel = document.getElementById('off-sel-' + id);
+  if (!sel) return;
+  let officer = '';
+  if (sel.value === '__custom') officer = (document.getElementById('off-cus-' + id).value || '').trim();
+  else if (sel.value === '__none') officer = '';
+  else officer = (sel.value || '').trim();
+  const r = trackerData.find(x => x.id == id);
+  if (!r) return;
+  // 選到通訊錄裡的人 → 自動帶其處室；清除承辦人 → 一併清處室
+  let dept = r.dept || '';
+  const hit = directoryData.find(d => (d.name || '').trim() === officer);
+  if (hit && (hit.dept || '').trim()) dept = hit.dept.trim();
+  if (!officer) dept = '';
+  r.officer = officer;
+  r.dept = dept;
+  localStorage.setItem('trackerData', JSON.stringify(trackerData));
+  renderTracker();
+  await updateOfficerInSheets(id, officer, dept);
+}
+
+async function updateOfficerInSheets(id, officer, dept) {
+  if (!getSheetsUrl()) return;
+  await sheetsRequest({ action: 'updateOfficer', id, officer, dept });
 }
 
 async function deleteRecord(id) {
