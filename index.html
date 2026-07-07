@@ -924,6 +924,7 @@ function setupDailyTrigger() {
 // 各寄一封提醒給該承辦人（Email 取自「通訊錄」）。
 // 沒填承辦人、或承辦人不在通訊錄的公文，彙整成一封寄給管理者（reminderEmail）。
 const OFFICER_REMINDER_DAYS = 7;
+const OFFICER_REMINDER_CC = 'hsuyiping@apps.ntpc.edu.tw'; // 每封承辦人催辦信同步副本給此信箱
 
 function sendOfficerReminders() {
   const ss = SpreadsheetApp.getActiveSpreadsheet();
@@ -982,7 +983,7 @@ function sendOfficerReminders() {
     const body = g.officer + ' 您好：\n\n以下是您承辦、期限在 ' + OFFICER_REMINDER_DAYS + ' 日內（含已逾期）的公文，請儘速辦理：\n\n' +
       g.items.map(line).join('\n') +
       '\n\n（' + rocDate + ' 系統自動提醒）\n———\n本信由「學校行政公文系統」自動發送，請勿直接回覆。';
-    GmailApp.sendEmail(email, subject, body);
+    GmailApp.sendEmail(email, subject, body, { cc: OFFICER_REMINDER_CC });
   });
 
   // 漏網公文彙整給管理者
