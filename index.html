@@ -255,7 +255,7 @@
   .empty-state .icon { font-size: 2.5rem; margin-bottom: 10px; }
 
   /* 函 專屬按鈕 */
-  .receiver-btn, .format-btn {
+  .receiver-btn, .format-btn, .mode-btn {
     padding: 8px 14px;
     border-radius: 8px;
     border: 1.5px solid #d5c9be;
@@ -267,10 +267,10 @@
     text-align: center;
     line-height: 1.4;
   }
-  .receiver-btn.active, .format-btn.active {
+  .receiver-btn.active, .format-btn.active, .mode-btn.active {
     background: #4a3728; color: #fff; border-color: #4a3728;
   }
-  .receiver-btn:hover:not(.active), .format-btn:hover:not(.active) {
+  .receiver-btn:hover:not(.active), .format-btn:hover:not(.active), .mode-btn:hover:not(.active) {
     border-color: #4a3728; color: #4a3728;
   }
 
@@ -381,6 +381,14 @@
 
       <!-- 函 專屬選項（只在選函時顯示） -->
       <div id="letter-options" style="display:none;margin-top:16px;padding-top:16px;border-top:1px solid #ede8e3;">
+        <!-- 函稿模式：關鍵字生成 vs 優化潤飾 -->
+        <div style="margin-bottom:16px;">
+          <p style="font-size:.83rem;color:#666;margin-bottom:8px;font-weight:600;">函稿撰寫方式</p>
+          <div style="display:flex;gap:8px;flex-wrap:wrap;">
+            <button class="mode-btn active" onclick="setLetterMode('keywords', this)">✍️ 關鍵字生成<br><span style="font-size:.75rem;font-weight:400;">（輸入重點，AI 撰寫）</span></button>
+            <button class="mode-btn" onclick="setLetterMode('polish', this)">✨ 優化潤飾<br><span style="font-size:.75rem;font-weight:400;">（上傳/貼上草稿，AI 潤飾）</span></button>
+          </div>
+        </div>
         <div style="display:flex;gap:16px;flex-wrap:wrap;align-items:flex-start;">
           <div style="flex:1;min-width:200px;">
             <p style="font-size:.83rem;color:#666;margin-bottom:8px;font-weight:600;">受文者層級</p>
@@ -404,18 +412,18 @@
 
     <!-- 區塊二：來文輸入 -->
     <div class="card">
-      <h2>📥 公文主旨</h2>
+      <h2 id="input-card-title">📥 公文主旨</h2>
 
-      <label>公文目的與用意（主旨）<span class="opt">選填，可讓 AI 自動判斷</span></label>
+      <label id="purpose-label">公文目的與用意（主旨）<span class="opt">選填，可讓 AI 自動判斷</span></label>
       <input type="text" id="purpose" placeholder="例：擬請學校派員參加教育局AI研習">
 
-      <label>說明內容 / 辦理依據<span class="req">*</span></label>
+      <label id="source-label">說明內容 / 辦理依據<span class="req">*</span></label>
       <textarea id="source-text" rows="5" placeholder="貼上來文內容，AI 會協助分析重點..."></textarea>
 
       <!-- 上傳區 -->
       <div class="upload-area" onclick="document.getElementById('file-input').click()">
         <div class="icon">📎</div>
-        <p>點擊上傳來文（PDF / 圖片 / TXT）</p>
+        <p id="upload-title">點擊上傳來文（PDF / 圖片 / TXT）</p>
         <p style="font-size:.8rem">AI 會自動辨識文字內容</p>
         <input type="file" id="file-input" accept=".pdf,.png,.jpg,.jpeg,.txt" onchange="handleFileUpload(event)">
       </div>
@@ -1110,6 +1118,7 @@ function setupOfficerReminderTrigger() {
 let currentType = 'sign';
 let currentReceiver = 'superior'; // superior / parallel / inferior
 let currentLetterFormat = 'draft'; // draft / final
+let currentLetterMode = 'keywords'; // keywords（關鍵字生成）/ polish（優化潤飾）
 let uploadedFile = null;
 let parsedData = {};
 let trackerData = JSON.parse(localStorage.getItem('trackerData') || '[]');
@@ -1300,6 +1309,44 @@ function setType(type, btn) {
   btn.classList.add('active');
   document.getElementById('type-desc').textContent = typeDesc[type];
   document.getElementById('letter-options').style.display = type === 'letter' ? 'block' : 'none';
+  refreshInputCard();
+}
+
+// 依目前類型與函稿模式，動態調整輸入卡的標題／標籤／提示文字
+function refreshInputCard() {
+  const title = document.getElementById('input-card-title');
+  const purposeLabel = document.getElementById('purpose-label');
+  const sourceLabel = document.getElementById('source-label');
+  const sourceText = document.getElementById('source-text');
+  const uploadTitle = document.getElementById('upload-title');
+
+  if (currentType === 'letter' && currentLetterMode === 'keywords') {
+    title.textContent = '✍️ 函稿重點';
+    purposeLabel.innerHTML = '公文目的（主旨）<span class="opt">選填，可讓 AI 自動判斷</span>';
+    sourceLabel.innerHTML = '撰寫重點 / 關鍵字<span class="req">*</span>';
+    sourceText.placeholder = '條列你想在這封函裡表達的重點，例如：\n・辦理本校教師 AI 增能研習\n・敬邀貴局派員指導\n・時間 8/15 下午、地點本校視聽教室\nAI 會據此寫成完整函稿。';
+    uploadTitle.textContent = '（選填）上傳參考資料（PDF / 圖片 / TXT）';
+  } else if (currentType === 'letter' && currentLetterMode === 'polish') {
+    title.textContent = '✨ 你的函稿草稿';
+    purposeLabel.innerHTML = '公文目的（主旨）<span class="opt">選填</span>';
+    sourceLabel.innerHTML = '你目前寫好的函稿草稿<span class="req">*</span>';
+    sourceText.placeholder = '貼上你自己寫的函稿草稿，AI 會優化公文用語、調整格式與結語，保留你的原意。\n（也可用下方上傳 PDF／圖片，經辨識後填入這裡）';
+    uploadTitle.textContent = '點擊上傳你的函稿草稿（PDF / 圖片 / TXT）';
+  } else {
+    // 簽 / 擬辦：維持原本「來文」語意
+    title.textContent = '📥 公文主旨';
+    purposeLabel.innerHTML = '公文目的與用意（主旨）<span class="opt">選填，可讓 AI 自動判斷</span>';
+    sourceLabel.innerHTML = '說明內容 / 辦理依據<span class="req">*</span>';
+    sourceText.placeholder = '貼上來文內容，AI 會協助分析重點...';
+    uploadTitle.textContent = '點擊上傳來文（PDF / 圖片 / TXT）';
+  }
+}
+
+function setLetterMode(mode, btn) {
+  currentLetterMode = mode;
+  document.querySelectorAll('.mode-btn').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+  refreshInputCard();
 }
 
 function setReceiver(receiver, btn) {
@@ -1532,31 +1579,18 @@ async function generateDoc() {
     const refWord = currentReceiver === 'superior' ? '奉' : '依據';
     const isDraft = currentLetterFormat === 'draft';
 
-    prompt = `你是台灣國民小學的行政人員，請依照正式公文書格式撰寫「${isDraft ? '函稿' : '函'}」。
-
-【學校】${schoolName}
-【承辦人】${officerTitle} ${officerName}
-【受文者層級】${receiverLevel}
-【公文目的】${purpose || '請根據來文內容自動判斷'}
-【來文機關】${org}
-【來文文號】${docno}
-【來文主旨】${subject}
-【來文內容摘要】${sourceText}
-【辦理期限】${deadline}
-【辦理方式建議】${suggestions}
-【附件】${attachments}
-
-格式規定（嚴格遵守）：
+    // 兩段共用的格式規定與輸出範本
+    const formatRules = `格式規定（嚴格遵守）：
 1. 不可使用任何 markdown 語法（不可有 **、*、# 等符號）
 2. 主旨結尾固定為「${closingPhrase}」，不可更改
-3. 說明段引述來文用「${refWord}」開頭
-4. 層級為上級機關時：說明段用「奉貴局...」，辦法段改為「謹陳」結尾
+3. 說明段引述依據用「${refWord}」開頭
+4. 層級為上級機關時：說明段用「奉...」，辦法段改為「謹陳」結尾
 5. 層級為平行機關時：說明段用「依據...」，辦法段用「請查照。」
 6. 層級為下級機關時：說明段用「依據...」，辦法段用「請照辦。」
 7. 嚴禁在任何詞語之間加入空格，包括「貴局」「貴校」「查照」「鑒核」「照辦」等詞前後均不加空格
-8. 主旨、說明、辦法各段落內容不得有任何多餘空格
+8. 主旨、說明、辦法各段落內容不得有任何多餘空格`;
 
-請按以下格式輸出：
+    const outputTemplate = `請按以下格式輸出：
 
 ${isDraft ? '（函稿）\n' : ''}受文者：
 發文日期：中華民國　　年　　月　　日
@@ -1568,8 +1602,8 @@ ${isDraft ? '（函稿）\n' : ''}受文者：
 主　旨：（一行，結尾「${closingPhrase}」）
 
 說　明：
-一、（${refWord}引述來文或依據）
-二、（說明事由或背景）
+一、（事由背景或依據）
+二、（重要說明）
 三、（如有期限或注意事項，否則省略）
 
 辦　法：
@@ -1577,6 +1611,41 @@ ${isDraft ? '（函稿）\n' : ''}受文者：
 
 正　本：（受文者名稱）
 副　本：（如有副本，否則省略）`;
+
+    if (currentLetterMode === 'polish') {
+      // ✨ 優化潤飾：承辦人提供自己的草稿，AI 優化公文用語、格式與結語，保留原意
+      prompt = `你是台灣國民小學資深的公文審稿人員。以下是承辦人自己撰寫的「${isDraft ? '函稿' : '函'}」草稿，請協助優化：修正公文用語、調整為正式公文格式與結構、潤飾語氣，並補齊缺漏的段落。務必保留承辦人原本要表達的意思與事實，不可自行捏造新的事實或數字。
+
+【學校】${schoolName}
+【承辦人】${officerTitle} ${officerName}
+【受文者層級】${receiverLevel}
+【公文目的】${purpose || '請由草稿內容自行判斷'}
+【辦理期限】${deadline}
+【承辦人的函稿草稿】
+${sourceText}
+
+${formatRules}
+9. 若草稿內容不足以構成完整公文，可依公文目的合理補充「說明」「辦法」的行文結構，但不得虛構具體事實。
+
+${outputTemplate}`;
+    } else {
+      // ✍️ 關鍵字生成：承辦人提供重點/關鍵字，AI 從零撰寫完整優質函稿
+      prompt = `你是台灣國民小學資深的行政人員。請依承辦人提供的重點與關鍵字，從零撰寫一封正式、用語優質的「${isDraft ? '函稿' : '函'}」。請把零散的重點組織成通順、得體的公文語句，不可虛構具體事實或數字。
+
+【學校】${schoolName}
+【承辦人】${officerTitle} ${officerName}
+【受文者層級】${receiverLevel}
+【公文目的（主旨）】${purpose || '請根據下列重點自動判斷'}
+【撰寫重點 / 關鍵字】
+${sourceText}
+【辦理期限】${deadline}
+【參考資料 / 補充】${suggestions || '無'}
+【附件】${attachments || '無'}
+
+${formatRules}
+
+${outputTemplate}`;
+    }
 
   } else {
     // 擬辦模式
