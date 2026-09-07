@@ -13,6 +13,7 @@
 - 雲端橋接：Google Apps Script Web App（GET 參數溝通，設定頁可一鍵複製程式碼）
 - 部署：GitHub Pages 靜態託管
 - 後端版本代號：`v7-portable`（`curl ".../exec?action=version"` 可驗證）
+- 線上部署現況：2026-09-07 已由 v6-officer-reminder 更新到 v7-portable（第 13 版，網址未變）
 
 ## 關鍵時程
 
@@ -29,8 +30,11 @@
 - [x] 階段六：函稿雙模式（關鍵字生成／優化潤飾）
 - [x] 階段七：新學年度初始化 — 學年度設定、批次改派未結案公文、舊結案公文封存與檢視
 - [x] 階段八：本機免費 OCR（Tesseract）＋ Groq API 轉送服務，並接上前端（僅本機版可用）
+- [x] 階段九：日期格式檢核與正規化（`normalizeRocDate`），收斂 AI 解析／手動輸入／雲端下載三來源的日期
 - [ ] 可考慮：追蹤頁「一鍵檢查哪些公文缺承辦人／承辦人不在通訊錄」檢核按鈕
 - [ ] 可考慮：舊公文批次補承辦人的體驗優化
+- [ ] 可考慮：Apps Script 加 `updateDate` action，讓日期正規化能寫回 Sheets（目前只改本機）
+- [ ] 待驗：Groq 撰稿的實際品質（目前只驗證轉送鏈路通，沒用真 key 跑過公文）
 
 ## 資料夾結構
 
@@ -42,9 +46,9 @@
 ├── handoff.md              # 交接檔（每次收工必更新）
 ├── .gitignore              # 忽略 .claude/、*.gsheet、暫存圖片
 ├── docs/
-│   ├── local-ocr.md        # 本機 OCR 使用說明（未 commit）
+│   ├── local-ocr.md        # 本機 OCR 使用說明
 │   └── screenshots/        # README 使用的介面圖（compose.svg、tracker.svg）
-└── tools/                  # 本機 OCR 服務（未 commit）
+└── tools/                  # 本機 OCR 服務（8766 埠）
     ├── local_ocr_server.py     # OCR + Groq 轉送服務
     ├── install_ocr_windows.ps1 # 一次性安裝（Tesseract、pypdfium2、中文語言包）
     ├── start_ocr_server.ps1    # 每次使用前啟動
