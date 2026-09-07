@@ -570,6 +570,38 @@
     </div>
 
     <div class="card">
+      <h2>🖥️ 本機 OCR 與 AI 供應商 <span style="font-size:.8rem;color:#aaa;font-weight:400">（選用）</span></h2>
+      <p style="font-size:.85rem;color:#888;margin-bottom:12px;">
+        啟動 <code>tools/start_ocr_server.ps1</code> 後，來文的 PDF／圖片會先在自己電腦用 Tesseract 轉成文字，不必上傳給雲端 AI。詳見 <code>docs/local-ocr.md</code>。
+      </p>
+      <label>本機服務網址</label>
+      <input type="text" id="local-ocr-url" placeholder="http://127.0.0.1:8766" style="margin-bottom:6px;">
+      <button class="btn btn-outline btn-sm" onclick="checkLocalOcr(true)">檢查本機服務</button>
+      <p id="ocr-status" style="font-size:.85rem;margin-top:8px;display:none;"></p>
+
+      <label style="margin-top:14px;">撰稿使用的 AI</label>
+      <select id="ai-provider" style="width:100%;margin-top:2px;" onchange="toggleGroqFields()">
+        <option value="gemini">Gemini（雲端，可直接讀圖片／PDF）</option>
+        <option value="groq">Groq（經本機服務轉送，只吃文字）</option>
+      </select>
+      <div id="groq-fields" style="display:none;margin-top:10px;">
+        <p style="font-size:.82rem;color:#b07d40;margin-bottom:8px;">Groq 沒有讀圖能力，來文一定要先由本機 OCR 轉成文字，因此使用 Groq 時必須保持本機服務開啟。</p>
+        <label>Groq API Key <span class="opt">console.groq.com/keys</span></label>
+        <input type="text" id="groq-key" placeholder="gsk_..." style="margin-bottom:6px;">
+        <label>模型</label>
+        <select id="groq-model" style="width:100%;margin-top:2px;">
+          <option value="qwen/qwen3-32b">Qwen3 32B（中文公文較穩）</option>
+          <option value="openai/gpt-oss-20b">GPT-OSS 20B（速度優先）</option>
+          <option value="llama-3.3-70b-versatile">Llama 3.3 70B</option>
+        </select>
+      </div>
+      <div style="margin-top:14px;">
+        <button class="btn btn-primary" onclick="saveAiSettings()">儲存</button>
+      </div>
+      <p id="ai-settings-status" style="font-size:.85rem;color:#27ae60;margin-top:8px;display:none;">✅ 已儲存</p>
+    </div>
+
+    <div class="card">
       <h2>🏫 學校基本資料</h2>
       <label>學校名稱</label>
       <input type="text" id="school-name" placeholder="例：新北市光復國民小學">
@@ -1183,6 +1215,12 @@ window.onload = function() {
   document.getElementById('reminder-email').value = localStorage.getItem('reminderEmail') || '';
   document.getElementById('sheets-url').value = localStorage.getItem('sheetsUrl') || '';
   document.getElementById('school-year').value = getCurrentSchoolYear();
+  document.getElementById('local-ocr-url').value = getLocalOcrUrl();
+  document.getElementById('ai-provider').value = getAiProvider();
+  document.getElementById('groq-key').value = localStorage.getItem('groqKey') || '';
+  document.getElementById('groq-model').value = localStorage.getItem('groqModel') || 'qwen/qwen3-32b';
+  toggleGroqFields();
+  checkLocalOcr(false); // 背景探測，不打擾使用者
 
   // 今天日期預設
   const today = new Date();
@@ -1519,21 +1557,157 @@ function showArchivedRecords() {
 }
 
 // ════════════════════════════════
+//  本機 OCR 服務 與 AI 供應商
+// ════════════════════════════════
+const DEFAULT_LOCAL_OCR_URL = 'http://127.0.0.1:8766';
+let localOcrReady = false;   // 最近一次探測的結果
+let ocrText = '';            // 目前上傳檔案的本機 OCR 結果
+
+function getLocalOcrUrl() {
+  return (localStorage.getItem('localOcrUrl') || DEFAULT_LOCAL_OCR_URL).replace(/\/+$/, '');
+}
+
+function getAiProvider() {
+  return localStorage.getItem('aiProvider') || 'gemini';
+}
+
+function toggleGroqFields() {
+  const el = document.getElementById('groq-fields');
+  if (el) el.style.display = document.getElementById('ai-provider').value === 'groq' ? 'block' : 'none';
+}
+
+function saveAiSettings() {
+  const url = document.getElementById('local-ocr-url').value.trim() || DEFAULT_LOCAL_OCR_URL;
+  localStorage.setItem('localOcrUrl', url);
+  localStorage.setItem('aiProvider', document.getElementById('ai-provider').value);
+  localStorage.setItem('groqKey', document.getElementById('groq-key').value.trim());
+  localStorage.setItem('groqModel', document.getElementById('groq-model').value);
+  toggleGroqFields();
+  const st = document.getElementById('ai-settings-status');
+  st.style.display = 'block';
+  setTimeout(() => st.style.display = 'none', 2000);
+  checkLocalOcr(false);
+}
+
+function showOcrStatus(msg, color) {
+  const el = document.getElementById('ocr-status');
+  if (!el) return;
+  el.textContent = msg;
+  el.style.color = color || '#27ae60';
+  el.style.display = 'block';
+}
+
+// 探測本機服務。verbose=true 時把結果顯示在設定頁。
+// 線上版（https）呼叫 http://localhost 會被瀏覽器擋下，這時一律視為不可用並退回雲端 AI。
+async function checkLocalOcr(verbose) {
+  const url = getLocalOcrUrl();
+  try {
+    const ctrl = new AbortController();
+    const timer = setTimeout(() => ctrl.abort(), 2500);
+    const res = await fetch(url + '/health', { signal: ctrl.signal });
+    clearTimeout(timer);
+    const data = await res.json();
+    localOcrReady = !!(data && data.ok && data.tesseract);
+    if (verbose) {
+      if (localOcrReady) {
+        showOcrStatus('✅ 本機服務正常（語言：' + data.lang + (data.pypdfium2 ? '、支援 PDF' : '、未安裝 pypdfium2，PDF 無法辨識') + '）', '#27ae60');
+      } else {
+        showOcrStatus('⚠️ 服務有回應，但 Tesseract 未就緒，請執行 tools/install_ocr_windows.ps1', '#c0392b');
+      }
+    }
+  } catch (e) {
+    localOcrReady = false;
+    if (verbose) {
+      showOcrStatus(location.protocol === 'https:'
+        ? '❌ 線上版無法連本機服務（瀏覽器會擋下 https → http://localhost）。請改用本機版 http://localhost:8765'
+        : '❌ 連不上本機服務，請先執行 tools/start_ocr_server.ps1', '#c0392b');
+    }
+  }
+  return localOcrReady;
+}
+
+// 把檔案送到本機服務做 OCR，回傳純文字；失敗丟出錯誤，由呼叫端決定是否退回雲端。
+async function localOcrExtract(file) {
+  const form = new FormData();
+  form.append('file', file, file.name);
+  const res = await fetch(getLocalOcrUrl() + '/ocr', { method: 'POST', body: form });
+  const data = await res.json();
+  if (!data || !data.ok) throw new Error((data && data.error) || '本機 OCR 失敗');
+  return data.text || '';
+}
+
+// 經本機服務轉送 Groq（瀏覽器直接打 Groq 會被 CORS 擋住）
+async function callGroq(prompt) {
+  const key = localStorage.getItem('groqKey') || '';
+  if (!key) throw new Error('請先在設定頁填入 Groq API Key');
+  if (!(await checkLocalOcr(false))) throw new Error('Groq 需要透過本機服務轉送，請先執行 tools/start_ocr_server.ps1');
+  const res = await fetch(getLocalOcrUrl() + '/ai/groq', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ apiKey: key, model: localStorage.getItem('groqModel') || 'qwen/qwen3-32b', prompt })
+  });
+  const data = await res.json();
+  if (!data || !data.ok) throw new Error((data && data.error) || 'Groq 撰稿失敗');
+  return data.text || '';
+}
+
+// 統一的 AI 進入點：parts 沿用 Gemini 格式，Groq 只取其中的文字。
+async function callAI(parts) {
+  if (getAiProvider() === 'groq') {
+    if (parts.some(p => p.inline_data)) {
+      throw new Error('Groq 無法直接讀圖片或 PDF，請先啟動本機 OCR 服務把來文轉成文字，或把 AI 供應商切回 Gemini');
+    }
+    const prompt = parts.map(p => p.text || '').filter(Boolean).join('\n\n');
+    const loading = document.querySelector('#loading p');
+    if (loading) loading.textContent = 'Groq 正在撰稿中，請稍候...';
+    return await callGroq(prompt);
+  }
+  const key = localStorage.getItem('geminiKey');
+  if (!key) throw new Error('請先設定 Gemini API Key（設定頁）');
+  return await callGemini(parts, key);
+}
+
+// ════════════════════════════════
 //  檔案上傳
 // ════════════════════════════════
 async function handleFileUpload(event) {
   const file = event.target.files[0];
   if (!file) return;
   uploadedFile = file;
+  ocrText = '';
   document.getElementById('file-name').textContent = '📄 ' + file.name;
   document.getElementById('file-preview').classList.add('show');
 
-  const key = localStorage.getItem('geminiKey');
-  if (!key) { alert('請先設定 Gemini API Key'); return; }
+  const provider = getAiProvider();
+  if (provider === 'gemini' && !localStorage.getItem('geminiKey')) { alert('請先設定 Gemini API Key'); return; }
 
-  // 讀取檔案
+  // 先試本機 OCR：PDF／圖片在自己電腦轉文字，不上傳雲端。
+  // Groq 沒有讀圖能力，所以用 Groq 時本機 OCR 是必要條件。
+  if (file.type !== 'text/plain' && await checkLocalOcr(false)) {
+    document.getElementById('file-name').textContent = '📄 ' + file.name + '（本機辨識中...）';
+    try {
+      ocrText = await localOcrExtract(file);
+      if (ocrText) {
+        document.getElementById('file-name').textContent = '📄 ' + file.name + '（已在本機辨識，未上傳雲端）';
+        document.getElementById('source-text').value = ocrText;
+        await parseDocument({ type: 'text', data: ocrText }, 'text/plain');
+        return;
+      }
+    } catch (e) {
+      console.warn('本機 OCR 失敗，改用雲端辨識', e);
+      document.getElementById('file-name').textContent = '📄 ' + file.name + '（本機辨識失敗，改用雲端）';
+    }
+  }
+
+  if (provider === 'groq') {
+    document.getElementById('file-name').textContent = '📄 ' + file.name;
+    alert('Groq 無法直接讀圖片或 PDF。\n請先執行 tools/start_ocr_server.ps1 啟動本機 OCR，或把 AI 供應商切回 Gemini。');
+    return;
+  }
+
+  // 退回原本流程：整份檔案送 Gemini Vision
   const content = await readFile(file);
-  await parseDocument(content, file.type, key);
+  await parseDocument(content, file.type);
 }
 
 function readFile(file) {
@@ -1550,7 +1724,7 @@ function readFile(file) {
   });
 }
 
-async function parseDocument(content, fileType, key) {
+async function parseDocument(content, fileType) {
   const prompt = `請從以下公文內容中提取關鍵資訊，以 JSON 格式回傳：
 {
   "org": "來文機關（如：新北市教育局）",
@@ -1571,7 +1745,7 @@ async function parseDocument(content, fileType, key) {
       ];
     }
 
-    const res = await callGemini(parts, key);
+    const res = await callAI(parts);
     const jsonMatch = res.match(/\{[\s\S]*\}/);
     if (jsonMatch) {
       parsedData = JSON.parse(jsonMatch[0]);
@@ -1597,6 +1771,7 @@ async function parseDocument(content, fileType, key) {
 
 function clearFile() {
   uploadedFile = null;
+  ocrText = '';
   document.getElementById('file-input').value = '';
   document.getElementById('file-preview').classList.remove('show');
   document.getElementById('parse-result').classList.remove('show');
@@ -1642,8 +1817,12 @@ async function callGemini(parts, key, retries = 3) {
 //  產稿
 // ════════════════════════════════
 async function generateDoc() {
-  const key = localStorage.getItem('geminiKey');
-  if (!key) { alert('請先設定 Gemini API Key（設定頁）'); return; }
+  if (getAiProvider() === 'gemini' && !localStorage.getItem('geminiKey')) {
+    alert('請先設定 Gemini API Key（設定頁）'); return;
+  }
+  if (getAiProvider() === 'groq' && !localStorage.getItem('groqKey')) {
+    alert('請先設定 Groq API Key（設定頁）'); return;
+  }
 
   const sourceText = document.getElementById('source-text').value.trim();
   const purpose = document.getElementById('purpose').value.trim();
@@ -1813,13 +1992,15 @@ ${outputTemplate}`;
   try {
     let parts = [{ text: prompt }];
 
-    // 如果有上傳圖片/PDF，一起送
-    if (uploadedFile && uploadedFile.type !== 'text/plain') {
+    // 已在本機 OCR 過就送文字（省流量也不外送原始檔）；否則把圖片/PDF 一起送雲端
+    if (ocrText) {
+      parts.push({ text: '來文 OCR 全文：\n' + ocrText });
+    } else if (uploadedFile && uploadedFile.type !== 'text/plain') {
       const content = await readFile(uploadedFile);
       parts.push({ inline_data: { mime_type: content.mimeType, data: content.data } });
     }
 
-    const result = await callGemini(parts, key);
+    const result = await callAI(parts);
     // 承辦人：解析框輸入優先，其次設定頁；若在通訊錄找得到，自動帶其處室
     const docOfficer = (readOfficerValue('pr-officer', 'pr-officer-custom') || localStorage.getItem('officerName') || '').trim();
     const dirHit = asArray(directoryData).find(d => (d.name || '').trim() === docOfficer && docOfficer !== '');

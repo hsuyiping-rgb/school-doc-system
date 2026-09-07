@@ -3,11 +3,9 @@
 這個專案提供一個本機免費 OCR 服務，用 Tesseract 辨識 PDF / 圖片，不需要把檔案送到 Gemini API。
 同一個本機服務也負責 Groq API 轉送，避免瀏覽器直接呼叫 Groq 時遇到 CORS 問題。
 
-> ⚠️ **目前狀態：後端服務可用，但 `index.html` 尚未接上。**
-> `tools/local_ocr_server.py` 已可獨立運作（`/health`、`/ocr`、`/ai/groq` 皆實測通過），
-> 但網頁端還沒有「呼叫本機 OCR」與「AI 供應商切換到 Groq」的介面，
-> 所以下方「使用流程」與「Groq 撰稿」是**接上前端之後**的預期操作方式。
-> 在那之前，可用 curl 或瀏覽器直接打本機服務測試。
+> ⚠️ **只有本機版（`http://localhost:8765`）能用。**
+> 線上版是 https，瀏覽器會擋下 https 頁面呼叫 `http://localhost` 的請求。
+> 線上版偵測不到本機服務時會自動退回 Gemini，不會壞掉，但也不會走本機 OCR。
 
 ## 第一次安裝
 
@@ -43,13 +41,15 @@ http://localhost:8766
 http://localhost:8765
 ```
 
-## 使用流程（待前端接上後適用）
+## 使用流程
 
-1. 啟動網頁預覽。
-2. 啟動本機 OCR 服務。
+1. 啟動網頁預覽（`http://localhost:8765`）。
+2. 啟動本機 OCR 服務（`http://localhost:8766`）。
 3. 在網頁上傳 PDF、圖片或 TXT。
-4. PDF / 圖片會在本機轉文字，不送到 Gemini。
-5. Gemini 只保留給後續產生簽、函、擬辦內容。
+4. 系統會先探測本機服務：探測得到就在本機轉文字，檔名旁會顯示「已在本機辨識，未上傳雲端」，
+   辨識結果同時填進「來文內容」框。
+5. 之後的欄位解析與產稿只送這段文字，原始 PDF / 圖片不會外送。
+6. 本機服務沒開、或辨識失敗時，會自動退回原本的 Gemini Vision（檔名旁會標示改用雲端）。
 
 ## 健康檢查
 
@@ -68,11 +68,14 @@ curl -F "file=@來文.pdf;type=application/pdf" http://127.0.0.1:8766/ocr
 curl -F "file=@來文.png;type=image/png" http://127.0.0.1:8766/ocr
 ```
 
-## Groq 撰稿（待前端接上後適用）
+## Groq 撰稿
 
 1. 到 `https://console.groq.com/keys` 建立 Groq API Key。
-2. 在系統的「設定」頁，把 AI 供應商切到 `Groq`。
-3. 貼上 Groq API Key，選擇模型後儲存。
-4. 撰稿時仍要保持本機服務 `http://localhost:8766` 開啟。
+2. 在「⚙️ 設定」頁的「🖥️ 本機 OCR 與 AI 供應商」，把「撰稿使用的 AI」切到 `Groq`。
+3. 貼上 Groq API Key，選擇模型後按「儲存」。
+4. 撰稿時要保持本機服務開啟——瀏覽器直接呼叫 Groq 會被 CORS 擋下，一律經本機服務轉送。
+
+Groq 沒有讀圖能力，所以用 Groq 時本機 OCR 是必要條件：上傳 PDF / 圖片而本機服務沒開，
+系統會直接提示，不會把檔案送出去。
 
 建議先用 `Qwen3 32B` 測試中文公文撰稿；若速度優先，可改用 `GPT-OSS 20B`。

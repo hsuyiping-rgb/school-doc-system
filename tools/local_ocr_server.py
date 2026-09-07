@@ -300,6 +300,10 @@ class Handler(BaseHTTPRequestHandler):
         self.send_header("Access-Control-Allow-Origin", "*")
         self.send_header("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
         self.send_header("Access-Control-Allow-Headers", "Content-Type")
+        # Chrome 的 Private Network Access：公開網站要打 localhost 需要這個標頭，
+        # 否則預檢就被擋下。仍不保證線上 https 版可用（混合內容政策各家瀏覽器不同），
+        # 本機版 http://localhost:8765 一定沒問題。
+        self.send_header("Access-Control-Allow-Private-Network", "true")
         self.send_header("Content-Length", str(len(data)))
         self.end_headers()
         self.wfile.write(data)
