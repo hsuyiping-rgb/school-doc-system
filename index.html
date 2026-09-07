@@ -860,7 +860,9 @@ function doGet(e) {
     return ok('nudged');
   }
 
-  return ok('unknown action');
+  return ContentService
+    .createTextOutput(JSON.stringify({ status: 'error', data: 'unknown action: ' + action }))
+    .setMimeType(ContentService.MimeType.JSON);
 }
 
 function ok(data) {
@@ -1474,7 +1476,7 @@ async function batchReassignOfficer() {
   if (!targets.length) { showYearStatus(`沒有找到 ${oldName} 的未結案公文`, '#b07d40'); return; }
   if (!confirm(`確定將 ${targets.length} 筆未結案公文\n由「${oldName}」改派給「${newName}」？`)) return;
 
-  const hit = directoryData.find(d => (d.name || '').trim() === newName);
+  const hit = asArray(directoryData).find(d => (d.name || '').trim() === newName);
   const dept = hit ? (hit.dept || '') : '';
   let synced = 0;
   for (const r of targets) {
@@ -1820,7 +1822,7 @@ ${outputTemplate}`;
     const result = await callGemini(parts, key);
     // 承辦人：解析框輸入優先，其次設定頁；若在通訊錄找得到，自動帶其處室
     const docOfficer = (readOfficerValue('pr-officer', 'pr-officer-custom') || localStorage.getItem('officerName') || '').trim();
-    const dirHit = directoryData.find(d => (d.name || '').trim() === docOfficer && docOfficer !== '');
+    const dirHit = asArray(directoryData).find(d => (d.name || '').trim() === docOfficer && docOfficer !== '');
     const docDept = dirHit ? (dirHit.dept || '') : (localStorage.getItem('myDept') || '');
     lastGeneratedDoc = {
       type: currentType,
@@ -1942,6 +1944,10 @@ function copyScript() {
   navigator.clipboard.writeText(code).then(() => alert('✅ 程式碼已複製'));
 }
 
+// 舊版 Apps Script 遇到不認得的 action 會回 {status:'ok', data:'unknown action'}（字串），
+// 直接當陣列用就會爆 xxx.find is not a function，故所有陣列型回傳一律先過這關。
+function asArray(v) { return Array.isArray(v) ? v : []; }
+
 async function sheetsRequest(params) {
   const url = getSheetsUrl();
   if (!url) return null;
@@ -1962,7 +1968,7 @@ async function testSheetsConnection() {
   showSheetsStatus('⏳ 測試連線中...', '#888');
   const res = await sheetsRequest({ action: 'getAll' });
   if (res && res.status === 'ok') {
-    showSheetsStatus(`✅ 連線成功！Sheets 中有 ${res.data.length} 筆資料`, '#27ae60');
+    showSheetsStatus(`✅ 連線成功！Sheets 中有 ${asArray(res.data).length} 筆資料`, '#27ae60');
   } else {
     showSheetsStatus('❌ 連線失敗，請確認網址是否正確', '#c0392b');
   }
@@ -1980,7 +1986,7 @@ async function uploadToSheets() {
     showSheetsStatus('❌ 無法讀取雲端資料，請先按「測試連線」確認', '#c0392b');
     return;
   }
-  const existingIds = new Set(existing.data.map(r => String(r.id)));
+  const existingIds = new Set(asArray(existing.data).map(r => String(r.id)));
 
   showSheetsStatus('⏳ 上傳中...', '#888');
   let ok = 0, fail = 0, skip = 0;
@@ -2005,7 +2011,7 @@ async function syncFromSheets() {
   showSheetsStatus('⏳ 從 Sheets 同步中...', '#888');
   const res = await sheetsRequest({ action: 'getAll' });
   if (res && res.status === 'ok') {
-    trackerData = res.data.map(r => ({
+    trackerData = asArray(res.data).map(r => ({
       id: r.id || Date.now(),
       date: r.date || '',
       org: r.org || '',
@@ -2333,7 +2339,7 @@ const DEPT_LIST = ['', '校長室', '教務處', '學務處', '總務處', '輔�
 function renderDirRows() {
   const wrap = document.getElementById('dir-rows');
   if (!wrap) return;
-  wrap.innerHTML = directoryData.map((d, i) => `
+  wrap.innerHTML = asArray(directoryData).map((d, i) => `
     <div style="display:flex;gap:6px;margin-bottom:6px;flex-wrap:wrap;">
       <input type="text" value="${(d.name || '').replace(/"/g, '&quot;')}" placeholder="姓名" onchange="directoryData[${i}].name=this.value" style="flex:1;min-width:90px;">
       <select onchange="directoryData[${i}].dept=this.value" style="flex:1;min-width:110px;">
@@ -2343,14 +2349,25 @@ function renderDirRows() {
       <button class="btn btn-danger btn-sm" onclick="removeDirRow(${i})">✕</button>
     </div>`).join('') || '<p style="font-size:.85rem;color:#aaa;">尚無資料，點「新增一列」開始。</p>';
 }
-function addDirRow() { directoryData.push({ name: '', dept: localStorage.getItem('myDept') || '', email: '' }); renderDirRows(); }
-function removeDirRow(i) { directoryData.splice(i, 1); renderDirRows(); }
+function addDirRow() { if (!Array.isArray(directoryData)) directoryData = []; directoryData.push({ name: '', dept: localStorage.getItem('myDept') || '', email: '' }); renderDirRows(); }
+function removeDirRow(i) { if (!Array.isArray(directoryData)) directoryData = []; directoryData.splice(i, 1); renderDirRows(); }
 function showDirStatus(msg, color) { const el = document.getElementById('dir-status'); el.textContent = msg; el.style.color = color || '#27ae60'; el.style.display = 'block'; setTimeout(() => el.style.display = 'none', 3000); }
 async function loadDirectory() {
   if (!getSheetsUrl()) { showDirStatus('請先設定 Google Sheets 連線', '#c0392b'); return; }
   showDirStatus('⏳ 載入中...', '#888');
   const res = await sheetsRequest({ action: 'getDirectory' });
-  if (res && res.status === 'ok') { directoryData = res.data || []; renderDirRows(); renderOfficerDatalist(); showDirStatus(`✅ 已載入 ${directoryData.length} 筆`, '#27ae60'); }
+  if (res && res.status === 'ok') {
+    if (!Array.isArray(res.data)) {
+      // 後端版本過舊（不支援 getDirectory），保持空陣列以免後續 .find 出錯
+      directoryData = [];
+      renderDirRows(); renderOfficerDatalist();
+      showDirStatus('⚠️ 雲端程式碼版本過舊，不支援通訊錄，請重新部署 Apps Script', '#c0392b');
+      return;
+    }
+    directoryData = res.data;
+    renderDirRows(); renderOfficerDatalist();
+    showDirStatus(`✅ 已載入 ${directoryData.length} 筆`, '#27ae60');
+  }
   else showDirStatus('❌ 載入失敗', '#c0392b');
 }
 
@@ -2359,7 +2376,7 @@ async function loadDirectory() {
 function getSelectableOfficers() {
   const role = localStorage.getItem('myRole') || 'officer';
   const myDept = (localStorage.getItem('myDept') || '').trim();
-  let list = directoryData.filter(d => (d.name || '').trim());
+  let list = asArray(directoryData).filter(d => (d.name || '').trim());
   if (role === 'supervisor' && myDept) {
     list = list.filter(d => (d.dept || '').trim() === myDept);
   }
@@ -2413,14 +2430,14 @@ function renderOfficerDatalist() {
   fillOfficerSelect('m-officer', 'm-officer-custom');
   const list = document.getElementById('officer-options');
   if (list) {
-    const names = [...new Set(directoryData.map(d => (d.name || '').trim()).filter(Boolean))].sort();
+    const names = [...new Set(asArray(directoryData).map(d => (d.name || '').trim()).filter(Boolean))].sort();
     list.innerHTML = names.map(name => `<option value="${name.replace(/"/g, '&quot;')}"></option>`).join('');
   }
 }
 async function saveDirectory() {
   if (!getSheetsUrl()) { showDirStatus('請先設定 Google Sheets 連線', '#c0392b'); return; }
   showDirStatus('⏳ 儲存中...', '#888');
-  const res = await sheetsRequest({ action: 'saveDirectory', rows: JSON.stringify(directoryData) });
+  const res = await sheetsRequest({ action: 'saveDirectory', rows: JSON.stringify(asArray(directoryData)) });
   if (res && res.status === 'ok') showDirStatus('✅ 通訊錄已儲存到雲端', '#27ae60');
   else showDirStatus('❌ 儲存失敗', '#c0392b');
 }
@@ -2468,7 +2485,7 @@ async function confirmOfficer(id) {
   if (!r) return;
   // 選到通訊錄裡的人 → 自動帶其處室；清除承辦人 → 一併清處室
   let dept = r.dept || '';
-  const hit = directoryData.find(d => (d.name || '').trim() === officer);
+  const hit = asArray(directoryData).find(d => (d.name || '').trim() === officer);
   if (hit && (hit.dept || '').trim()) dept = hit.dept.trim();
   if (!officer) dept = '';
   r.officer = officer;
