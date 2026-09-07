@@ -14,3 +14,10 @@
 Thumbs.db
 Desktop.ini
 .DS_Store
+
+# Python 暫存
+__pycache__/
+*.pyc
+
+# Tesseract 語言包（約 28MB，由 tools/install_ocr_windows.ps1 自動下載）
+tools/tessdata/
