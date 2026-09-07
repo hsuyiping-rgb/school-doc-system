@@ -1220,7 +1220,10 @@ window.onload = function() {
   document.getElementById('groq-key').value = localStorage.getItem('groqKey') || '';
   document.getElementById('groq-model').value = localStorage.getItem('groqModel') || 'qwen/qwen3-32b';
   toggleGroqFields();
-  checkLocalOcr(false); // 背景探測，不打擾使用者
+  // 背景探測本機服務。線上版（https）本來就連不到 http://localhost，
+  // 探測只會在每個使用者的 console 留下一行紅字，所以只在本機版探測；
+  // 設定頁的「檢查本機服務」按鈕不受此限，按了仍會實際嘗試並說明原因。
+  if (location.protocol !== 'https:') checkLocalOcr(false);
 
   // 今天日期預設
   const today = new Date();
@@ -1228,6 +1231,7 @@ window.onload = function() {
   document.getElementById('m-date').value = `${roc}/${String(today.getMonth()+1).padStart(2,'0')}/${String(today.getDate()).padStart(2,'0')}`;
 
   dedupeTracker(); // 開啟時自動清除既有重複
+  normalizeTrackerDates(); // 修正歷史髒日期（如 0115/06/25 → 115/06/25）
   applyRoleToViews(); // 依角色設定檢視按鈕與預設檢視
   renderTracker();
   if (getSheetsUrl()) loadDirectory(); // 載入雲端通訊錄
@@ -2194,11 +2198,11 @@ async function syncFromSheets() {
   if (res && res.status === 'ok') {
     trackerData = asArray(res.data).map(r => ({
       id: r.id || Date.now(),
-      date: r.date || '',
+      date: normalizeRocDate(r.date) || r.date || '',
       org: r.org || '',
       subject: r.subject || '',
       type: r.type || 'sign',
-      deadline: r.deadline || '無',
+      deadline: normalizeRocDate(r.deadline || '無') || r.deadline || '無',
       status: r.status || 'pending',
       officer: r.officer || '',
       dept: r.dept || '',
@@ -2208,8 +2212,9 @@ async function syncFromSheets() {
     }));
     localStorage.setItem('trackerData', JSON.stringify(trackerData));
     const removed = dedupeTracker(); // 從雲端拉回後也去重
+    const fixedDates = normalizeTrackerDates(); // 雲端的舊髒日期一併收斂
     renderTracker();
-    showSheetsStatus(`✅ 已同步 ${trackerData.length} 筆資料${removed ? `（清除 ${removed} 筆重複）` : ''}`, '#27ae60');
+    showSheetsStatus(`✅ 已同步 ${trackerData.length} 筆資料${removed ? `（清除 ${removed} 筆重複）` : ''}${fixedDates ? `（修正 ${fixedDates} 個日期格式）` : ''}`, '#27ae60');
   } else {
     showSheetsStatus('❌ 同步失敗', '#c0392b');
   }
@@ -2290,11 +2295,14 @@ function dedupeTracker() {
 
 async function saveToTracker() {
   if (!lastGeneratedDoc) return;
-  const deadline = lastGeneratedDoc.deadline || '無';
+  // AI 解析出來的期限格式不固定，存進追蹤前先收斂。
+  // 看不懂就原樣保留（例如「儘速辦理」比改成「無」有資訊量），追蹤頁會當作沒有倒數。
+  const rawDeadline = lastGeneratedDoc.deadline || '無';
+  const deadline = normalizeRocDate(rawDeadline) || rawDeadline;
   const tasks = extractTasks(lastGeneratedDoc.type, lastGeneratedDoc.content);
   const record = {
     id: Date.now(),
-    date: lastGeneratedDoc.date,
+    date: normalizeRocDate(lastGeneratedDoc.date) || lastGeneratedDoc.date,
     org: lastGeneratedDoc.org || '（未填）',
     subject: lastGeneratedDoc.subject || '（未填）',
     type: lastGeneratedDoc.type,
@@ -2335,6 +2343,85 @@ const typeLabel = { sign: '簽', letter: '函', draft: '擬辦' };
 const typeBadge = { sign: 'badge-sign', letter: 'badge-letter', draft: 'badge-draft' };
 const statusLabel = { pending: '待辦', progress: '處理中', done: '已結案', urgent: '緊急' };
 const statusBadge = { pending: 'badge-pending', progress: 'badge-progress', done: 'badge-done', urgent: 'badge-urgent' };
+
+// ════════════════════════════════
+//  日期正規化與檢核
+//  來源很雜：AI 解析、手動輸入、雲端下載，常見髒資料是民國年多打一個 0
+//  （0115/06/25）、用西元年、分隔符不一致。統一收斂成「115/06/25」。
+// ════════════════════════════════
+// 詞彙型（可能夾在句子裡，用包含判斷）
+const NO_DEADLINE_WORDS = ['無', '不限', '未定'];
+// 符號型（只有整格就是這個符號才算沒日期；不能用包含判斷，
+// 否則 115-6-25 會因為含有 '-' 被誤判成沒有日期）
+const NO_DEADLINE_MARKS = ['—', '-', '－', '─', 'N/A'];
+
+// 這個值代表「沒有日期」，不是格式錯誤
+function isBlankDate(value) {
+  const v = String(value == null ? '' : value).trim();
+  if (!v) return true;
+  if (NO_DEADLINE_MARKS.includes(v)) return true;
+  return NO_DEADLINE_WORDS.some(w => v.includes(w));
+}
+
+// 回傳正規化後的民國日期字串；無法解析回 null；空值／「無」原樣回傳
+function normalizeRocDate(value) {
+  if (isBlankDate(value)) return String(value == null ? '' : value).trim();
+  const m = String(value).match(/(\d{1,4})\s*[\/年.\-]\s*(\d{1,2})\s*[\/月.\-]\s*(\d{1,2})/);
+  if (!m) return null;
+
+  let y = parseInt(m[1], 10);   // parseInt 會吃掉前導 0，0115 → 115
+  const mo = parseInt(m[2], 10);
+  const d = parseInt(m[3], 10);
+  if (!y || !mo || !d) return null;
+  if (y >= 1911) y -= 1911;     // 西元轉民國
+  if (y < 1 || y > 999) return null;
+  if (mo < 1 || mo > 12) return null;
+
+  // 用 Date 反驗，擋掉 2 月 30 日這種不存在的日期
+  const probe = new Date(y + 1911, mo - 1, d);
+  if (probe.getMonth() !== mo - 1 || probe.getDate() !== d) return null;
+
+  return y + '/' + String(mo).padStart(2, '0') + '/' + String(d).padStart(2, '0');
+}
+
+// 表單用：檢核單一欄位，不合法就提示並回 false
+function checkDateField(inputId, label, allowBlank) {
+  const el = document.getElementById(inputId);
+  if (!el) return true;
+  const raw = el.value.trim();
+  if (!raw) {
+    if (allowBlank) return true;
+    alert('請填寫' + label);
+    el.focus();
+    return false;
+  }
+  const fixed = normalizeRocDate(raw);
+  if (fixed === null) {
+    alert(label + '格式看不懂：「' + raw + '」\n請用民國年月日，例如 115/06/25 或 115年6月25日。');
+    el.focus();
+    return false;
+  }
+  el.value = fixed;   // 就地修正，讓使用者看得到改成什麼
+  return true;
+}
+
+// 開啟時掃一次本機資料，把能修的日期修掉（例如 0115/06/25 → 115/06/25）
+function normalizeTrackerDates() {
+  let fixed = 0;
+  trackerData.forEach(r => {
+    ['date', 'deadline'].forEach(field => {
+      const before = r[field];
+      if (before == null || isBlankDate(before)) return;
+      const after = normalizeRocDate(before);
+      if (after && after !== String(before).trim()) {
+        r[field] = after;
+        fixed++;
+      }
+    });
+  });
+  if (fixed > 0) localStorage.setItem('trackerData', JSON.stringify(trackerData));
+  return fixed;
+}
 
 function daysUntilDeadline(deadlineStr) {
   if (!deadlineStr || deadlineStr === '無' || deadlineStr.includes('無')) return null;
@@ -2715,13 +2802,16 @@ function closeModal() {
 async function addManualRecord() {
   const subject = document.getElementById('m-subject').value.trim();
   if (!subject) { alert('請填寫主旨摘要'); return; }
+  // 日期格式檢核：不合法就擋下，可修正的就地改成標準寫法
+  if (!checkDateField('m-date', '來文日期', true)) return;
+  if (!checkDateField('m-deadline', '辦理期限', true)) return;
   const record = {
     id: Date.now(),
-    date: document.getElementById('m-date').value || '—',
+    date: normalizeRocDate(document.getElementById('m-date').value) || '—',
     org: document.getElementById('m-org').value || '（未填）',
     subject,
     type: document.getElementById('m-type').value,
-    deadline: document.getElementById('m-deadline').value || '無',
+    deadline: normalizeRocDate(document.getElementById('m-deadline').value) || '無',
     status: 'pending',
     officer: (readOfficerValue('m-officer', 'm-officer-custom') || localStorage.getItem('officerName') || '').trim(),
     dept: (document.getElementById('m-dept-sel') ? document.getElementById('m-dept-sel').value : '') || (localStorage.getItem('myDept') || '').trim(),
