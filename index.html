@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>學校行政公文系統</title>
+<title>學校公文擬辦提醒系統</title>
 <style>
   * { box-sizing: border-box; margin: 0; padding: 0; }
   body {
@@ -333,7 +333,7 @@
 <body>
 
 <header>
-  <h1>📋 學校行政公文系統</h1>
+  <h1>📋 學校公文擬辦提醒系統</h1>
   <nav class="tab-nav">
     <button class="tab-btn active" data-tab="today" onclick="switchTab('today')">📅 今日</button>
     <button class="tab-btn" data-tab="compose" onclick="switchTab('compose')">✍️ 撰稿</button>
@@ -606,6 +606,30 @@
     </div>
 
     <div class="card">
+      <h2>🎒 新學年度初始化</h2>
+      <p style="font-size:.82rem;color:#888;margin-bottom:10px;">建議先到 Google Sheets 複製一份舊學年度備份，再更新承辦人。這裡只調整本系統資料，不會刪除舊公文。</p>
+      <label>目前學年度</label>
+      <input type="text" id="school-year" placeholder="例：115" style="margin-bottom:10px;">
+      <button class="btn btn-primary btn-sm" onclick="saveSchoolYear()">儲存學年度</button>
+
+      <div style="margin-top:14px;background:#f9f6f2;border-radius:8px;padding:12px;">
+        <label>批次改派未結案公文</label>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;">
+          <input type="text" id="old-officer" list="officer-options" placeholder="原承辦人" style="flex:1;min-width:130px;">
+          <input type="text" id="new-officer" list="officer-options" placeholder="新承辦人" style="flex:1;min-width:130px;">
+          <button class="btn btn-primary btn-sm" onclick="batchReassignOfficer()">批次改派</button>
+        </div>
+        <p style="font-size:.78rem;color:#888;margin-top:6px;">只會改「待辦 / 處理中」公文，已結案公文會保留原承辦人。</p>
+      </div>
+
+      <div style="margin-top:12px;display:flex;gap:8px;flex-wrap:wrap;">
+        <button class="btn btn-outline btn-sm" onclick="archiveOldDoneRecords()">隱藏舊學年度已結案</button>
+        <button class="btn btn-outline btn-sm" onclick="showArchivedRecords()">顯示所有已隱藏資料</button>
+      </div>
+      <p id="year-status" style="font-size:.85rem;margin-top:8px;display:none;"></p>
+    </div>
+
+    <div class="card">
       <h2>📇 人員通訊錄 <span style="font-size:.8rem;color:#aaa;font-weight:400">（催辦 Email 用）</span></h2>
       <p style="font-size:.82rem;color:#888;margin-bottom:10px;">登錄承辦人對應的處室與 Email，主管「催辦」時系統才能寄信給對的人。共用於雲端，全校一份。</p>
       <div id="dir-rows"></div>
@@ -616,6 +640,7 @@
       </div>
       <p id="dir-status" style="font-size:.85rem;margin-top:8px;display:none;"></p>
     </div>
+    <datalist id="officer-options"></datalist>
 
     <div class="card">
       <h2>📅 每日待辦提醒</h2>
@@ -650,7 +675,7 @@
           <li>點「部署」→「新增部署作業」→類型選「網頁應用程式」</li>
           <li>執行身分：「我」，存取權：「任何人」→ 點「部署」（過程需授權自己的 Google 帳號）</li>
           <li>複製產生的網址，貼到上方欄位 → 按「儲存網址」→「測試連線」</li>
-          <li>✅ 首次連線時會<b>自動在你的雲端硬碟建立「公文追蹤系統」試算表</b>（含公文追蹤、通訊錄、系統設定三個分頁），之後可按「📄 開啟我的試算表」查看</li>
+          <li>✅ 首次連線時會<b>自動在你的雲端硬碟建立「學校公文擬辦提醒系統」試算表</b>（含公文追蹤、通訊錄、系統設定三個分頁），之後可按「📄 開啟我的試算表」查看</li>
         </ol>
         <p style="font-size:.82rem;color:#4a3728;margin-top:10px;line-height:1.8;">📧 <b>每日 Email 提醒（選用）</b>：貼好上方程式碼後，在 Apps Script 上方函式選單選「<b>setupDailyTrigger</b>」按▶執行一次（會要求授權），即可在每個上班日早上自動寄出今日待辦彙總信給管理者。主管想收信可在程式碼 <code>REMINDER_EMAILS</code> 填入信箱（多人用逗號分隔）。</p>
         <p style="font-size:.82rem;color:#4a3728;margin-top:8px;line-height:1.8;">🔔 <b>承辦人自動催辦（選用）</b>：另選「<b>setupOfficerReminderTrigger</b>」按▶執行一次，即可在每個上班日早上，將「期限 7 日內或已逾期」的公文<b>依承辦人分別寄信提醒</b>（Email 取自「人員通訊錄」）。沒填承辦人或通訊錄查無 Email 的公文，會彙整成一封寄給上方「每日提醒信箱」，提醒補登。</p>
@@ -662,7 +687,7 @@ const CONFIG_SHEET = '系統設定';
 // 取得（或自動建立）試算表：
 // 1. 曾記住的試算表 ID → 直接開啟
 // 2. 綁定在試算表底下（擴充功能→Apps Script 建立）→ 用該試算表
-// 3. 獨立指令碼（script.google.com 建立）→ 第一次呼叫時自動建立「公文追蹤系統」試算表
+// 3. 獨立指令碼（script.google.com 建立）→ 第一次呼叫時自動建立「學校公文擬辦提醒系統」試算表
 function getSS() {
   const props = PropertiesService.getScriptProperties();
   const savedId = props.getProperty('SS_ID');
@@ -674,7 +699,7 @@ function getSS() {
     props.setProperty('SS_ID', bound.getId());
     return bound;
   }
-  const ss = SpreadsheetApp.create('公文追蹤系統');
+  const ss = SpreadsheetApp.create('學校公文擬辦提醒系統');
   props.setProperty('SS_ID', ss.getId());
   const first = ss.getSheets()[0];
   if (first && (first.getName() === '工作表1' || first.getName() === 'Sheet1')) {
@@ -830,7 +855,7 @@ function doGet(e) {
     let body = officer + ' 您好：\n\n主管提醒您儘速處理下列公文：\n\n主旨：' + rec[hh.subject] +
       '\n來文機關：' + rec[hh.org] + '\n辦理期限：' + rec[hh.deadline] +
       (note ? '\n\n主管留言：' + note : '') +
-      '\n\n請儘速辦理，謝謝。\n———\n本信由「學校行政公文系統」自動發送。';
+      '\n\n請儘速辦理，謝謝。\n———\n本信由「學校公文擬辦提醒系統」自動發送。';
     GmailApp.sendEmail(email, subject, body);
     return ok('nudged');
   }
@@ -939,7 +964,7 @@ function sendDailyReminder() {
   body += sec('[今日到期]', b.today);
   body += sec('[3天內到期]', b.soon);
   body += sec('[' + REMINDER_DAYS_AHEAD + '天內到期]', b.week);
-  body += '———\n本信由「學校行政公文系統」自動發送。';
+  body += '———\n本信由「學校公文擬辦提醒系統」自動發送。';
 
   const cfgEmail = gsGetConfig(ss, 'reminderEmail');
   const to = (cfgEmail && cfgEmail.trim()) || REMINDER_EMAILS.trim() || Session.getEffectiveUser().getEmail();
@@ -1017,7 +1042,7 @@ function sendOfficerReminders() {
     const subject = '【公文催辦提醒】您有 ' + g.items.length + ' 件公文於 ' + OFFICER_REMINDER_DAYS + ' 日內到期（含逾期）';
     const body = g.officer + ' 您好：\n\n以下是您承辦、期限在 ' + OFFICER_REMINDER_DAYS + ' 日內（含已逾期）的公文，請儘速辦理：\n\n' +
       g.items.map(line).join('\n') +
-      '\n\n（' + rocDate + ' 系統自動提醒）\n———\n本信由「學校行政公文系統」自動發送，請勿直接回覆。';
+      '\n\n（' + rocDate + ' 系統自動提醒）\n———\n本信由「學校公文擬辦提醒系統」自動發送，請勿直接回覆。';
     GmailApp.sendEmail(email, subject, body, OFFICER_REMINDER_CC ? { cc: OFFICER_REMINDER_CC } : {});
   });
 
@@ -1028,7 +1053,7 @@ function sendOfficerReminders() {
     const subject = '【公文催辦－待補承辦人】' + orphan.length + ' 件公文 ' + OFFICER_REMINDER_DAYS + ' 日內到期但無法個別催辦';
     const body = rocDate + '　下列公文將於 ' + OFFICER_REMINDER_DAYS + ' 日內到期（含已逾期），但因「未填承辦人」或「承辦人不在通訊錄」，無法自動寄給承辦人，請補登後處理：\n\n' +
       orphan.map(it => line(it) + (it.officer ? '　〔承辦：' + it.officer + '，通訊錄查無 Email〕' : '　〔未填承辦人〕')).join('\n') +
-      '\n\n———\n本信由「學校行政公文系統」自動發送。';
+      '\n\n———\n本信由「學校公文擬辦提醒系統」自動發送。';
     GmailApp.sendEmail(to, subject, body);
   }
 }
@@ -1057,7 +1082,7 @@ function setupOfficerReminderTrigger() {
 <!-- ══ 初次設定精靈 Modal ══ -->
 <div id="setup-overlay" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:110;align-items:center;justify-content:center;">
   <div style="background:#fff;border-radius:14px;padding:28px;width:92%;max-width:520px;box-shadow:0 8px 32px rgba(0,0,0,.2);max-height:88vh;overflow-y:auto;">
-    <h3 style="margin-bottom:6px;color:#4a3728;">👋 歡迎使用學校行政公文系統</h3>
+    <h3 style="margin-bottom:6px;color:#4a3728;">👋 歡迎使用學校公文擬辦提醒系統</h3>
     <p style="font-size:.88rem;color:#666;margin-bottom:16px;">花 30 秒完成初次設定（之後可隨時在「⚙️ 設定」頁調整）。</p>
     <label>學校名稱</label>
     <input type="text" id="setup-school" placeholder="例：新北市○○區○○國民小學">
@@ -1155,6 +1180,7 @@ window.onload = function() {
   document.getElementById('my-dept').value = localStorage.getItem('myDept') || '';
   document.getElementById('reminder-email').value = localStorage.getItem('reminderEmail') || '';
   document.getElementById('sheets-url').value = localStorage.getItem('sheetsUrl') || '';
+  document.getElementById('school-year').value = getCurrentSchoolYear();
 
   // 今天日期預設
   const today = new Date();
@@ -1282,7 +1308,7 @@ function maybeShowTodayReminder() {
   localStorage.setItem('lastReminded', stamp);
   // 桌面通知（若已授權）
   if (window.Notification && Notification.permission === 'granted') {
-    new Notification('學校行政公文系統', { body: `今日待辦 ${total} 件（逾期 ${b.overdue.length}、今日到期 ${b.today.length}）` });
+    new Notification('學校公文擬辦提醒系統', { body: `今日待辦 ${total} 件（逾期 ${b.overdue.length}、今日到期 ${b.today.length}）` });
   }
   setTimeout(() => {
     alert(`📅 今日提醒\n\n🔴 已逾期：${b.overdue.length} 件\n🟠 今日到期：${b.today.length} 件\n🟡 3 天內：${b.soon.length} 件\n🟢 7 天內：${b.later.length} 件`);
@@ -1389,6 +1415,105 @@ function saveSettings() {
   if (getSheetsUrl()) sheetsRequest({ action: 'setConfig', key: 'reminderEmail', value: remindEmail });
   document.getElementById('settings-status').style.display = 'block';
   setTimeout(() => document.getElementById('settings-status').style.display = 'none', 2000);
+}
+
+function inferSchoolYear(date = new Date()) {
+  const d = date instanceof Date ? date : parseRocOrDate(date);
+  if (!d) return new Date().getFullYear() - 1911;
+  const roc = d.getFullYear() - 1911;
+  return d.getMonth() >= 7 ? roc : roc - 1;
+}
+
+function parseRocOrDate(value) {
+  if (!value) return null;
+  if (value instanceof Date) return value;
+  const s = String(value);
+  const m = s.match(/(\d{2,4})[\/年.-](\d{1,2})[\/月.-](\d{1,2})/);
+  if (!m) return null;
+  let y = parseInt(m[1], 10);
+  if (y < 1000) y += 1911;
+  const d = new Date(y, parseInt(m[2], 10) - 1, parseInt(m[3], 10));
+  return Number.isNaN(d.getTime()) ? null : d;
+}
+
+function getCurrentSchoolYear() {
+  return localStorage.getItem('schoolYear') || String(inferSchoolYear());
+}
+
+function recordSchoolYear(record) {
+  return String(record.schoolYear || inferSchoolYear(record.date || record.deadline || new Date()));
+}
+
+function saveSchoolYear() {
+  const year = document.getElementById('school-year').value.trim();
+  if (!/^\d{2,3}$/.test(year)) { showYearStatus('請輸入民國學年度，例如 115', '#c0392b'); return; }
+  localStorage.setItem('schoolYear', year);
+  showYearStatus(`✅ 已設定為 ${year} 學年度`, '#27ae60');
+  renderTracker();
+}
+
+function showYearStatus(msg, color) {
+  const el = document.getElementById('year-status');
+  el.textContent = msg;
+  el.style.color = color || '#27ae60';
+  el.style.display = 'block';
+  setTimeout(() => el.style.display = 'none', 4500);
+}
+
+function isRecordArchived(record) {
+  return localStorage.getItem('showArchivedRecords') !== '1' && record.archived === true;
+}
+
+async function batchReassignOfficer() {
+  const oldName = document.getElementById('old-officer').value.trim();
+  const newName = document.getElementById('new-officer').value.trim();
+  if (!oldName || !newName) { showYearStatus('請輸入原承辦人與新承辦人', '#c0392b'); return; }
+  if (oldName === newName) { showYearStatus('原承辦人與新承辦人相同，不需要改派', '#b07d40'); return; }
+
+  const targets = trackerData.filter(r => (r.officer || '').trim() === oldName && r.status !== 'done');
+  if (!targets.length) { showYearStatus(`沒有找到 ${oldName} 的未結案公文`, '#b07d40'); return; }
+  if (!confirm(`確定將 ${targets.length} 筆未結案公文\n由「${oldName}」改派給「${newName}」？`)) return;
+
+  const hit = directoryData.find(d => (d.name || '').trim() === newName);
+  const dept = hit ? (hit.dept || '') : '';
+  let synced = 0;
+  for (const r of targets) {
+    r.officer = newName;
+    if (dept) r.dept = dept;
+    r.schoolYear = r.schoolYear || getCurrentSchoolYear();
+    if (getSheetsUrl()) {
+      await updateOfficerInSheets(r.id, r.officer, r.dept || '');
+      synced++;
+      await new Promise(resolve => setTimeout(resolve, 250));
+    }
+  }
+  localStorage.setItem('trackerData', JSON.stringify(trackerData));
+  renderTracker();
+  showYearStatus(`✅ 已改派 ${targets.length} 筆${getSheetsUrl() ? `，並同步 ${synced} 筆到 Sheets` : ''}`, '#27ae60');
+}
+
+function archiveOldDoneRecords() {
+  const currentYear = parseInt(getCurrentSchoolYear(), 10);
+  let count = 0;
+  trackerData.forEach(r => {
+    const y = parseInt(recordSchoolYear(r), 10);
+    if (r.status === 'done' && y < currentYear && !r.archived) {
+      r.archived = true;
+      count++;
+    }
+  });
+  localStorage.setItem('showArchivedRecords', '0');
+  localStorage.setItem('trackerData', JSON.stringify(trackerData));
+  renderTracker();
+  showYearStatus(count ? `✅ 已隱藏 ${count} 筆舊學年度已結案資料` : '沒有需要隱藏的舊學年度已結案資料', count ? '#27ae60' : '#b07d40');
+}
+
+function showArchivedRecords() {
+  localStorage.setItem('showArchivedRecords', '1');
+  trackerData.forEach(r => { if (r.archived) r.archived = false; });
+  localStorage.setItem('trackerData', JSON.stringify(trackerData));
+  renderTracker();
+  showYearStatus('✅ 已顯示所有資料', '#27ae60');
 }
 
 // ════════════════════════════════
@@ -1890,6 +2015,8 @@ async function syncFromSheets() {
       status: r.status || 'pending',
       officer: r.officer || '',
       dept: r.dept || '',
+      schoolYear: r.schoolYear || inferSchoolYear(r.date || r.deadline || new Date()),
+      archived: r.archived === true,
       content: r.content || ''
     }));
     localStorage.setItem('trackerData', JSON.stringify(trackerData));
@@ -1988,6 +2115,8 @@ async function saveToTracker() {
     status: 'pending',
     officer: (lastGeneratedDoc.officer || localStorage.getItem('officerName') || '').trim(),
     dept: (lastGeneratedDoc.dept || localStorage.getItem('myDept') || '').trim(),
+    schoolYear: getCurrentSchoolYear(),
+    archived: false,
     content: `辦理期限：${deadline}\n要完成的工作：\n${tasks || '（未擷取到，請參考原稿）'}`
   };
   // 重複防治：已存在相同公文則擋下
@@ -2036,14 +2165,15 @@ function renderTracker() {
   // 檢視過濾：我的公文 / 我的處室 / 全校
   const myOfficer = (localStorage.getItem('officerName') || '').trim();
   const myDept = (localStorage.getItem('myDept') || '').trim();
-  let viewData = trackerData;
+  const visibleTrackerData = trackerData.filter(r => !isRecordArchived(r));
+  let viewData = visibleTrackerData;
   if (currentView === 'mine' && myOfficer) {
-    viewData = trackerData.filter(r => {
+    viewData = visibleTrackerData.filter(r => {
       const o = (r.officer || '').trim();
       return o === myOfficer || o === '';
     });
   } else if (currentView === 'dept' && myDept) {
-    viewData = trackerData.filter(r => (r.dept || '').trim() === myDept);
+    viewData = visibleTrackerData.filter(r => (r.dept || '').trim() === myDept);
   } // currentView === 'all' → 全部
 
   // 主管彙整面板
@@ -2148,14 +2278,14 @@ function applyRoleToViews() {
 // 主管／校長彙整：全校→各處室；我的處室→各承辦人
 function renderSupervisorSummary() {
   const el = document.getElementById('supervisor-summary');
-  let title = '', keyFn = null, source = trackerData;
+  let title = '', keyFn = null, source = trackerData.filter(r => !isRecordArchived(r));
   if (currentView === 'all') {
     title = '🏫 各處室待辦彙整';
     keyFn = r => (r.dept || '').trim() || '（未指定處室）';
   } else if (currentView === 'dept') {
     const myDept = (localStorage.getItem('myDept') || '').trim();
     title = `🏢 ${myDept || '本處室'}各承辦人待辦彙整`;
-    source = trackerData.filter(r => (r.dept || '').trim() === myDept);
+    source = source.filter(r => (r.dept || '').trim() === myDept);
     keyFn = r => (r.officer || '').trim() || '（未指定）';
   } else { el.style.display = 'none'; return; }
 
@@ -2281,6 +2411,11 @@ function readOfficerValue(selId, customId) {
 function renderOfficerDatalist() {
   fillOfficerSelect('pr-officer', 'pr-officer-custom');
   fillOfficerSelect('m-officer', 'm-officer-custom');
+  const list = document.getElementById('officer-options');
+  if (list) {
+    const names = [...new Set(directoryData.map(d => (d.name || '').trim()).filter(Boolean))].sort();
+    list.innerHTML = names.map(name => `<option value="${name.replace(/"/g, '&quot;')}"></option>`).join('');
+  }
 }
 async function saveDirectory() {
   if (!getSheetsUrl()) { showDirStatus('請先設定 Google Sheets 連線', '#c0392b'); return; }
@@ -2392,6 +2527,8 @@ async function addManualRecord() {
     status: 'pending',
     officer: (readOfficerValue('m-officer', 'm-officer-custom') || localStorage.getItem('officerName') || '').trim(),
     dept: (document.getElementById('m-dept-sel') ? document.getElementById('m-dept-sel').value : '') || (localStorage.getItem('myDept') || '').trim(),
+    schoolYear: getCurrentSchoolYear(),
+    archived: false,
     content: ''
   };
   // 重複防治
